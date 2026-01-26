@@ -1,0 +1,40 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: wherestrangersmeet-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?prepareThreshold=0&preparedStatementCacheQueries=0}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres.atqtehnaflliqierqooo}
+    password: ${SPRING_DATASOURCE_PASSWORD:Ab3090426@98}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      auto-commit: true
+      pool-name: HikariCP-DevKerja
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+logging:
+  level:
+    com.wherestrangersmeet: DEBUG
+
+cloud:
+  aws:
+    credentials:
+      access-key: ${CLOUD_AWS_CREDENTIALS_ACCESSKEY:6e0755ea1a0edd6f3bd8327d74ffa62c}
+      secret-key: ${CLOUD_AWS_CREDENTIALS_SECRETKEY:1bef9318a3f8c790b5f8740dca39b73e56f19db9145b153000c61b3f4ab59cde}
+    s3:
+      endpoint: ${CLOUD_AWS_S3_ENDPOINT:https://1da7b1c23be93d40510dc214fc2d4be7.r2.cloudflarestorage.com}
+      bucket: ${CLOUD_AWS_S3_BUCKET:devkerja}
