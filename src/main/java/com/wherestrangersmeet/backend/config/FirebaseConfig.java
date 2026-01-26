@@ -18,7 +18,16 @@ public class FirebaseConfig {
     @PostConstruct
     public void initialize() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
-            InputStream serviceAccount = new ClassPathResource("firebase-service-account.json").getInputStream();
+            InputStream serviceAccount;
+            String envCredentials = System.getenv("FIREBASE_CREDENTIALS");
+
+            if (envCredentials != null && !envCredentials.isEmpty()) {
+                // Use environment variable if available (Docker/Render)
+                serviceAccount = new java.io.ByteArrayInputStream(envCredentials.getBytes());
+            } else {
+                // Fallback to local file
+                serviceAccount = new ClassPathResource("firebase-service-account.json").getInputStream();
+            }
 
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(serviceAccount))
