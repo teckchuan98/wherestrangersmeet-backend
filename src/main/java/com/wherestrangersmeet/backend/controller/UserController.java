@@ -6,8 +6,10 @@ import com.wherestrangersmeet.backend.service.FileStorageService;
 import com.wherestrangersmeet.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -44,7 +46,7 @@ public class UserController {
             @RequestBody Map<String, Object> request) {
 
         User user = userService.getUserByFirebaseUid(principal.getUid())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         String genderStr = (String) request.get("gender");
         String futureGoals = (String) request.get("futureGoals");
@@ -84,7 +86,7 @@ public class UserController {
             @RequestBody Map<String, String> request) {
 
         User user = userService.getUserByFirebaseUid(principal.getUid())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         String phoneNumber = request.get("phoneNumber");
         if (phoneNumber == null || phoneNumber.isEmpty()) {
@@ -133,7 +135,7 @@ public class UserController {
             @RequestBody Map<String, String> request) {
 
         User user = userService.getUserByFirebaseUid(principal.getUid())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         String key = request.get("key");
         if (key == null || key.isEmpty()) {

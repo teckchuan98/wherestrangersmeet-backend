@@ -35,17 +35,25 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String idToken = authHeader.substring(7);
+            System.out.println("Processing request: " + request.getMethod() + " " + request.getRequestURI());
+            System.out.println("Token found (length: " + idToken.length() + ")");
             try {
                 FirebaseToken decodedToken = firebaseAuth.verifyIdToken(idToken);
+                String uid = decodedToken.getUid();
+                System.out.println("Token verified. UID: " + uid);
+
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         decodedToken,
                         null,
-                        Collections.emptyList()
-                );
+                        Collections.emptyList());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                System.out.println("SecurityContext set for user: " + uid);
             } catch (Exception e) {
+                System.err.println("Firebase token verification failed: " + e.getMessage());
                 logger.error("Firebase token verification failed", e);
             }
+        } else {
+            System.out.println("No Bearer token found in request headers for " + request.getRequestURI());
         }
 
         filterChain.doFilter(request, response);
