@@ -27,12 +27,28 @@ public class UserController {
      */
     @GetMapping("/me")
     public ResponseEntity<?> getUserProfile(@AuthenticationPrincipal FirebaseToken principal) {
+        System.out.println("========== GET /api/users/me ==========");
+        System.out.println("Principal: " + (principal != null ? principal.getUid() : "NULL"));
+
+        if (principal == null) {
+            System.err.println("ERROR: FirebaseToken principal is NULL - authentication failed!");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        System.out.println("Email: " + principal.getEmail());
+        System.out.println("Name: " + principal.getName());
+
         // Automatically create user if they don't exist (Sync from Firebase)
         User user = userService.createUserIfNew(
                 principal.getUid(),
                 principal.getEmail(),
                 principal.getName(),
                 principal.getPicture());
+
+        System.out.println("User retrieved/created: ID=" + user.getId() + ", UID=" + user.getFirebaseUid());
+        System.out.println("========================================");
+
         return ResponseEntity.ok(user);
     }
 
@@ -45,8 +61,25 @@ public class UserController {
             @AuthenticationPrincipal FirebaseToken principal,
             @RequestBody Map<String, Object> request) {
 
+        System.out.println("========== ONBOARDING REQUEST ==========");
+        System.out.println("Principal: " + (principal != null ? principal.getUid() : "NULL"));
+        System.out.println("Request body: " + request);
+
+        if (principal == null) {
+            System.err.println("ERROR: FirebaseToken principal is NULL - authentication failed!");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        System.out.println("Looking up user by Firebase UID: " + principal.getUid());
+
         User user = userService.getUserByFirebaseUid(principal.getUid())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> {
+                    System.err.println("ERROR: User not found in database for UID: " + principal.getUid());
+                    return new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+                });
+
+        System.out.println("User found: ID=" + user.getId() + ", Name=" + user.getName());
 
         String genderStr = (String) request.get("gender");
         String futureGoals = (String) request.get("futureGoals");
@@ -58,7 +91,7 @@ public class UserController {
             try {
                 gender = User.Gender.valueOf(genderStr.toUpperCase());
             } catch (IllegalArgumentException e) {
-                // Ignore invalid
+                System.err.println("Invalid gender value: " + genderStr);
             }
         }
 
@@ -67,12 +100,16 @@ public class UserController {
             try {
                 occupationStatus = User.OccupationStatus.valueOf(occupationStatusStr.toUpperCase());
             } catch (IllegalArgumentException e) {
-                // Ignore invalid
+                System.err.println("Invalid occupation status value: " + occupationStatusStr);
             }
         }
 
         User updatedUser = userService.updateOnboardingDetails(user.getId(), gender, futureGoals, occupationStatus,
                 occupationTitle);
+
+        System.out.println("Onboarding updated successfully for user: " + updatedUser.getId());
+        System.out.println("========================================");
+
         return ResponseEntity.ok(updatedUser);
     }
 

@@ -17,24 +17,43 @@ public class FirebaseConfig {
 
     @PostConstruct
     public void initialize() throws IOException {
+        System.out.println("========== INITIALIZING FIREBASE ==========");
+
         if (FirebaseApp.getApps().isEmpty()) {
             InputStream serviceAccount;
             String envCredentials = System.getenv("FIREBASE_CREDENTIALS");
 
             if (envCredentials != null && !envCredentials.isEmpty()) {
-                // Use environment variable if available (Docker/Render)
+                System.out.println("Using Firebase credentials from environment variable");
                 serviceAccount = new java.io.ByteArrayInputStream(envCredentials.getBytes());
             } else {
-                // Fallback to local file
-                serviceAccount = new ClassPathResource("firebase-service-account.json").getInputStream();
+                System.out.println("Using Firebase credentials from firebase-service-account.json");
+                try {
+                    serviceAccount = new ClassPathResource("firebase-service-account.json").getInputStream();
+                } catch (IOException e) {
+                    System.err.println("ERROR: Cannot find firebase-service-account.json!");
+                    System.err.println("Make sure the file exists in src/main/resources/");
+                    throw e;
+                }
             }
 
-            FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                    .build();
+            try {
+                FirebaseOptions options = FirebaseOptions.builder()
+                        .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                        .build();
 
-            FirebaseApp.initializeApp(options);
+                FirebaseApp.initializeApp(options);
+                System.out.println("✓ Firebase initialized successfully!");
+            } catch (Exception e) {
+                System.err.println("✗ FIREBASE INITIALIZATION FAILED!");
+                System.err.println("Error: " + e.getMessage());
+                throw e;
+            }
+        } else {
+            System.out.println("Firebase already initialized");
         }
+
+        System.out.println("===========================================");
     }
 
     @Bean
