@@ -25,6 +25,10 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
 
 logging:
   level:
@@ -38,3 +42,7 @@ cloud:
     s3:
       endpoint: ${CLOUD_AWS_S3_ENDPOINT:https://1da7b1c23be93d40510dc214fc2d4be7.r2.cloudflarestorage.com}
       bucket: ${CLOUD_AWS_S3_BUCKET:devkerja}
+
+openai:
+  api:
+    key: ${OPENAI_API_KEY}
