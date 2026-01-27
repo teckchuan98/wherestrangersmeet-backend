@@ -19,6 +19,7 @@ public class VerificationController {
     public ResponseEntity<Map<String, Object>> verifyPhotos(
             @RequestParam("photo1") MultipartFile photo1,
             @RequestParam("photo2") MultipartFile photo2) {
+        System.out.println(">>> Verification Controller HIT!");
         try {
             Map<String, Object> result = openAIService.verifyPhotos(photo1, photo2);
             return ResponseEntity.ok(result);

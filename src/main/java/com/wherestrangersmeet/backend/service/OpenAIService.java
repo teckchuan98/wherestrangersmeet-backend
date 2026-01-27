@@ -21,6 +21,14 @@ public class OpenAIService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public Map<String, Object> verifyPhotos(MultipartFile photo1, MultipartFile photo2) throws IOException {
+        System.out.println(">>> OpenAIService.verifyPhotos called.");
+        if (apiKey == null || apiKey.isEmpty()) {
+            System.err.println("!!! ERROR: OpenAI API Key is missing or empty!");
+            throw new RuntimeException("OpenAI API Key is not configured.");
+        } else {
+            System.out.println(">>> OpenAI API Key present (length: " + apiKey.length() + ")");
+        }
+
         String base64Image1 = Base64.getEncoder().encodeToString(photo1.getBytes());
         String base64Image2 = Base64.getEncoder().encodeToString(photo2.getBytes());
 
