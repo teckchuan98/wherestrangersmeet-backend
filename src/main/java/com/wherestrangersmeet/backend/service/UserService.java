@@ -28,14 +28,17 @@ public class UserService {
 
     @Transactional
     public User createUserIfNew(String firebaseUid, String email, String name, String avatarUrl) {
+        // First check by Firebase UID
         Optional<User> existing = userRepository.findByFirebaseUid(firebaseUid);
         if (existing.isPresent()) {
+            System.out.println("User already exists with UID: " + firebaseUid);
             return existing.get();
         }
 
-        // Also check by email to link accounts
+        // Check by email to link accounts
         Optional<User> existingByEmail = userRepository.findByEmail(email);
         if (existingByEmail.isPresent()) {
+            System.out.println("User exists with email, linking Firebase UID: " + firebaseUid);
             User user = existingByEmail.get();
             user.setFirebaseUid(firebaseUid);
             if (avatarUrl != null)
@@ -43,20 +46,44 @@ public class UserService {
             return userRepository.save(user);
         }
 
-        User user = new User();
-        user.setFirebaseUid(firebaseUid);
-        user.setEmail(email);
-        user.setName(name != null ? name : email.split("@")[0]);
-        user.setAvatarUrl(avatarUrl);
-        return userRepository.save(user);
+        // Try to create new user
+        try {
+            User user = new User();
+            user.setFirebaseUid(firebaseUid);
+            user.setEmail(email);
+            user.setName(name != null ? name : email.split("@")[0]);
+            user.setAvatarUrl(avatarUrl);
+            System.out.println("Creating new user: " + email);
+            return userRepository.save(user);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Race condition: another thread just created this user
+            // Retry the lookup
+            System.out.println("Duplicate key detected, retrying lookup for: " + firebaseUid);
+
+            existing = userRepository.findByFirebaseUid(firebaseUid);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+
+            existingByEmail = userRepository.findByEmail(email);
+            if (existingByEmail.isPresent()) {
+                return existingByEmail.get();
+            }
+
+            // If still not found, rethrow the exception
+            throw e;
+        }
     }
 
     @Transactional
     public User updateOnboardingDetails(Long id, User.Gender gender, String futureGoals,
-            User.OccupationStatus occupationStatus, String occupationTitle) {
+            User.OccupationStatus occupationStatus, String occupationTitle, String name) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        if (name != null && !name.trim().isEmpty()) {
+            user.setName(name);
+        }
         if (gender != null)
             user.setGender(gender);
         if (futureGoals != null)

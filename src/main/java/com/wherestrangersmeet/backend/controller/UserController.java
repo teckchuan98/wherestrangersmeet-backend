@@ -85,6 +85,7 @@ public class UserController {
         String futureGoals = (String) request.get("futureGoals");
         String occupationStatusStr = (String) request.get("occupationStatus");
         String occupationTitle = (String) request.get("occupationTitle");
+        String name = (String) request.get("name");
 
         User.Gender gender = null;
         if (genderStr != null) {
@@ -105,7 +106,7 @@ public class UserController {
         }
 
         User updatedUser = userService.updateOnboardingDetails(user.getId(), gender, futureGoals, occupationStatus,
-                occupationTitle);
+                occupationTitle, name);
 
         System.out.println("Onboarding updated successfully for user: " + updatedUser.getId());
         System.out.println("========================================");
