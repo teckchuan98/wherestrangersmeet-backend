@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.S3Client;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -18,6 +19,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class FileStorageService {
 
+    private final S3Client s3Client;
     private final S3Presigner s3Presigner;
 
     @Value("${cloud.aws.s3.bucket}")
@@ -61,15 +63,19 @@ public class FileStorageService {
         return result;
     }
 
+    public java.io.InputStream downloadFile(String key) {
+        software.amazon.awssdk.services.s3.model.GetObjectRequest getObjectRequest = software.amazon.awssdk.services.s3.model.GetObjectRequest
+                .builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+
+        return s3Client.getObject(getObjectRequest);
+    }
+
     public String getPublicUrl(String key) {
-        if (publicUrlBase != null && !publicUrlBase.isEmpty()) {
-            return publicUrlBase.endsWith("/") ? publicUrlBase + key : publicUrlBase + "/" + key;
-        }
-        // Fallback to generating a signed URL if no public URL is configured
-        // Or return just the key if frontend handles it?
-        // Let's generate a long-lived signed URL (e.g. 1 hour) for immediate use?
-        // No, that's not permanent.
-        // Assuming R2 public bucket access or worker.
-        return "https://pub-" + bucketName + ".r2.dev/" + key; // Placeholder default
+        // Use backend proxy endpoint instead of public R2 URL
+        // This solves the 401 Unauthorized issue for private buckets
+        return "/api/public/images/" + key;
     }
 }
