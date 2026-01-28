@@ -216,4 +216,45 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    /**
+     * PUT /api/users/interests
+     * Update user interest tags
+     */
+    @PutMapping("/interests")
+    public ResponseEntity<?> updateInterestTags(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody Map<String, List<String>> request) {
+
+        System.out.println("========== UPDATE INTERESTS ==========");
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User user = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        List<String> tags = request.get("tags");
+        User updatedUser = userService.updateInterestTags(user.getId(), tags);
+
+        return ResponseEntity.ok(updatedUser);
+    }
+
+    /**
+     * DELETE /api/users/me
+     * Delete user account
+     */
+    @DeleteMapping("/me")
+    public ResponseEntity<?> deleteAccount(@AuthenticationPrincipal FirebaseToken principal) {
+        System.out.println("========== DELETE ACCOUNT ==========");
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User user = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        userService.deleteUser(user.getId());
+        // Note: Client should also sign out from Firebase
+
+        return ResponseEntity.ok(Map.of("message", "Account deleted successfully"));
+    }
 }

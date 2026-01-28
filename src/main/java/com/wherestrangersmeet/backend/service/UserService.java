@@ -138,4 +138,24 @@ public class UserService {
 
         return userPhotoRepository.save(photo);
     }
+
+    @Transactional
+    public void deleteUser(Long id) {
+        if (!userRepository.existsById(id)) {
+            throw new RuntimeException("User not found");
+        }
+        userRepository.deleteById(id);
+    }
+
+    @Transactional
+    public User updateInterestTags(Long id, List<String> tags) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.getInterestTags().clear();
+        if (tags != null) {
+            user.getInterestTags().addAll(tags);
+        }
+        return userRepository.save(user);
+    }
 }
