@@ -49,6 +49,22 @@ public class UserController {
 
         System.out.println("User retrieved/created: ID=" + user.getId() + ", UID=" + user.getFirebaseUid());
         System.out.println("Photos found: " + (user.getPhotos() != null ? user.getPhotos().size() : "NULL"));
+
+        // Convert R2 keys to Presigned URLs
+        if (user.getAvatarUrl() != null && !user.getAvatarUrl().startsWith("http")) {
+            String presigned = fileStorageService.generatePresignedUrl(user.getAvatarUrl());
+            user.setAvatarUrl(presigned);
+        }
+
+        if (user.getPhotos() != null) {
+            user.getPhotos().forEach(photo -> {
+                if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
+                    String presigned = fileStorageService.generatePresignedUrl(photo.getUrl());
+                    photo.setUrl(presigned);
+                }
+            });
+        }
+
         System.out.println("========================================");
 
         return ResponseEntity.ok(user);
@@ -188,6 +204,13 @@ public class UserController {
 
         try {
             var photo = userService.addUserPhoto(user.getId(), key);
+
+            // Convert to Presigned URL for immediate display
+            if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
+                String presigned = fileStorageService.generatePresignedUrl(photo.getUrl());
+                photo.setUrl(presigned);
+            }
+
             return ResponseEntity.ok(photo);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

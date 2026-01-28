@@ -73,9 +73,35 @@ public class FileStorageService {
         return s3Client.getObject(getObjectRequest);
     }
 
+    public String generatePresignedUrl(String key) {
+        // If it's already a URL, return it
+        if (key == null || key.startsWith("http")) {
+            return key;
+        }
+
+        try {
+            software.amazon.awssdk.services.s3.model.GetObjectRequest getObjectRequest = software.amazon.awssdk.services.s3.model.GetObjectRequest
+                    .builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build();
+
+            software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest presignRequest = software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
+                    .builder()
+                    .signatureDuration(Duration.ofHours(1))
+                    .getObjectRequest(getObjectRequest)
+                    .build();
+
+            return s3Presigner.presignGetObject(presignRequest).url().toString();
+
+        } catch (Exception e) {
+            System.err.println("Error generating presigned URL: " + e.getMessage());
+            return key; // Fallback to key
+        }
+    }
+
     public String getPublicUrl(String key) {
-        // Use backend proxy endpoint instead of public R2 URL
-        // This solves the 401 Unauthorized issue for private buckets
-        return "/api/public/images/" + key;
+        // Return the key directly; the Controller will convert it to a Presigned URL
+        return key;
     }
 }
