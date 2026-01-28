@@ -83,9 +83,14 @@ public class OpenAIService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
 
         try {
+            System.out.println("Sending request to OpenAI...");
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            System.out.println("OpenAI Status: " + response.getStatusCode());
+            System.out.println("OpenAI Body: " + response.getBody());
+
             JsonNode root = objectMapper.readTree(response.getBody());
             String contentString = root.path("choices").get(0).path("message").path("content").asText();
+            System.out.println("OpenAI Parsed Content: " + contentString);
 
             return objectMapper.readValue(contentString, Map.class);
         } catch (Exception e) {

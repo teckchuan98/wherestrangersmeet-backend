@@ -40,9 +40,17 @@ public class VerificationController {
         }
 
         try {
+            System.out.println("Calling OpenAIService...");
             Map<String, Object> result = openAIService.verifyPhotos(photo1, photo2);
+            System.out.println("OpenAIService returned: " + (result != null ? result.toString() : "NULL"));
+
+            if (result == null) {
+                return ResponseEntity.internalServerError()
+                        .body(Map.of("message", "Internal Error: OpenAI Service returned null"));
+            }
             return ResponseEntity.ok(result);
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "Verification failed: " + e.getMessage()));
         }
