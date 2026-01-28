@@ -48,6 +48,7 @@ public class UserController {
                 principal.getPicture());
 
         System.out.println("User retrieved/created: ID=" + user.getId() + ", UID=" + user.getFirebaseUid());
+        System.out.println("Photos found: " + (user.getPhotos() != null ? user.getPhotos().size() : "NULL"));
         System.out.println("========================================");
 
         return ResponseEntity.ok(user);
