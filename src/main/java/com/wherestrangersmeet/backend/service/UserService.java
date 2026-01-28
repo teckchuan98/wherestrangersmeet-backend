@@ -32,8 +32,12 @@ public class UserService {
         // First check by Firebase UID
         Optional<User> existing = userRepository.findByFirebaseUid(firebaseUid);
         if (existing.isPresent()) {
+            User user = existing.get();
+            if (user.isBanned()) {
+                throw new RuntimeException("Account deactivated");
+            }
             System.out.println("User already exists with UID: " + firebaseUid);
-            return existing.get();
+            return user;
         }
 
         // Check by email to link accounts
@@ -141,10 +145,10 @@ public class UserService {
 
     @Transactional
     public void deleteUser(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new RuntimeException("User not found");
-        }
-        userRepository.deleteById(id);
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setBanned(true);
+        userRepository.save(user); // Soft delete via ban
     }
 
     @Transactional
