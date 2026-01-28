@@ -79,7 +79,7 @@ public class User {
     @Column(name = "interest")
     private List<String> interestTags = new ArrayList<>();
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<UserPhoto> photos = new ArrayList<>();
 
     @CreationTimestamp
