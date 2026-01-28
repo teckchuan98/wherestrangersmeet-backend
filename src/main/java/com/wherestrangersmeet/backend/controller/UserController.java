@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
@@ -86,6 +87,10 @@ public class UserController {
         String occupationStatusStr = (String) request.get("occupationStatus");
         String occupationTitle = (String) request.get("occupationTitle");
         String name = (String) request.get("name");
+        String institution = (String) request.get("institution");
+        String occupationYear = (String) request.get("occupationYear");
+        String occupationDescription = (String) request.get("occupationDescription");
+        List<String> interestTags = (List<String>) request.get("interestTags");
 
         User.Gender gender = null;
         if (genderStr != null) {
@@ -106,7 +111,7 @@ public class UserController {
         }
 
         User updatedUser = userService.updateOnboardingDetails(user.getId(), gender, futureGoals, occupationStatus,
-                occupationTitle, name);
+                occupationTitle, name, institution, occupationYear, occupationDescription, interestTags);
 
         System.out.println("Onboarding updated successfully for user: " + updatedUser.getId());
         System.out.println("========================================");

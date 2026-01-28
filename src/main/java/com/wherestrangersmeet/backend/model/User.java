@@ -65,6 +65,20 @@ public class User {
     @Column(name = "occupation_title")
     private String occupationTitle;
 
+    @Column(name = "institution")
+    private String institution;
+
+    @Column(name = "occupation_year")
+    private String occupationYear;
+
+    @Column(name = "occupation_description", columnDefinition = "TEXT")
+    private String occupationDescription;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_interests", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "interest")
+    private List<String> interestTags = new ArrayList<>();
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UserPhoto> photos = new ArrayList<>();
 

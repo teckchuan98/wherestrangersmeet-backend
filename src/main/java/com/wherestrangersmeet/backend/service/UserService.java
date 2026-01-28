@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -77,7 +78,8 @@ public class UserService {
 
     @Transactional
     public User updateOnboardingDetails(Long id, User.Gender gender, String futureGoals,
-            User.OccupationStatus occupationStatus, String occupationTitle, String name) {
+            User.OccupationStatus occupationStatus, String occupationTitle, String name,
+            String institution, String occupationYear, String occupationDescription, List<String> interestTags) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -92,6 +94,16 @@ public class UserService {
             user.setOccupationStatus(occupationStatus);
         if (occupationTitle != null)
             user.setOccupationTitle(occupationTitle);
+        if (institution != null)
+            user.setInstitution(institution);
+        if (occupationYear != null)
+            user.setOccupationYear(occupationYear);
+        if (occupationDescription != null)
+            user.setOccupationDescription(occupationDescription);
+        if (interestTags != null) {
+            user.getInterestTags().clear(); // Clear existing
+            user.getInterestTags().addAll(interestTags);
+        }
 
         return userRepository.save(user);
     }
@@ -100,13 +112,10 @@ public class UserService {
     public User updatePhoneNumber(Long id, String phoneNumber) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        // Currently User model doesn't have phoneNumber field in my create call
-        // earlier?
-        // Let me check User.java content I wrote.
-        // Ah, I missed phoneNumber in the User.java creation step.
-        // I should add it now or assume it's there?
-        // I will add it using multi_replace_file_content if missing.
-        // For now let's assume I'll adding it.
+        if (phoneNumber != null && !phoneNumber.trim().isEmpty()) {
+            user.setPhoneNumber(phoneNumber);
+            return userRepository.save(user);
+        }
         return user;
     }
 
@@ -120,6 +129,12 @@ public class UserService {
         UserPhoto photo = new UserPhoto();
         photo.setUser(user);
         photo.setUrl(publicUrl);
+
+        // Set as avatar if none exists
+        if (user.getAvatarUrl() == null) {
+            user.setAvatarUrl(publicUrl);
+            userRepository.save(user); // Save user to update avatar
+        }
 
         return userPhotoRepository.save(photo);
     }
