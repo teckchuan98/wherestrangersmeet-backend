@@ -41,21 +41,11 @@ public class UserController {
         System.out.println("Name: " + principal.getName());
 
         // Automatically create user if they don't exist (Sync from Firebase)
-        User user;
-        try {
-            user = userService.createUserIfNew(
-                    principal.getUid(),
-                    principal.getEmail(),
-                    principal.getName(),
-                    principal.getPicture());
-        } catch (RuntimeException e) {
-            if ("Account deactivated".equals(e.getMessage())) {
-                System.err.println("Blocking login for deactivated user: " + principal.getEmail());
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Account deactivated"));
-            }
-            throw e;
-        }
+        User user = userService.createUserIfNew(
+                principal.getUid(),
+                principal.getEmail(),
+                principal.getName(),
+                principal.getPicture());
 
         System.out.println("User retrieved/created: ID=" + user.getId() + ", UID=" + user.getFirebaseUid());
         System.out.println("Photos found: " + (user.getPhotos() != null ? user.getPhotos().size() : "NULL"));
