@@ -39,21 +39,33 @@ public class UserController {
         // String currentUid = principal.getUid();
         // users.removeIf(u -> currentUid.equals(u.getFirebaseUid()));
 
-        // Process avatar URLs
-        users.forEach(user -> {
-            if (user.getAvatarUrl() != null && !user.getAvatarUrl().startsWith("http")) {
-                user.setAvatarUrl(fileStorageService.generatePresignedUrl(user.getAvatarUrl()));
-            }
-            if (user.getPhotos() != null) {
+        // Process avatar URLs and filter users without photos
+        List<User> validUsers = new java.util.ArrayList<>();
+
+        for (User user : users) {
+            // boolean hasAvatar = user.getAvatarUrl() != null &&
+            // !user.getAvatarUrl().isEmpty();
+            // User requested to ONLY show users with Cloudflare photos, ignoring Gmail
+            // avatars
+            boolean hasPhotos = user.getPhotos() != null && !user.getPhotos().isEmpty();
+
+            if (hasPhotos) {
+                // Still process avatar in case we need it as fallback or for detail view
+                if (user.getAvatarUrl() != null && !user.getAvatarUrl().startsWith("http")) {
+                    user.setAvatarUrl(fileStorageService.generatePresignedUrl(user.getAvatarUrl()));
+                }
+
                 user.getPhotos().forEach(photo -> {
                     if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
                         photo.setUrl(fileStorageService.generatePresignedUrl(photo.getUrl()));
                     }
                 });
-            }
-        });
 
-        return ResponseEntity.ok(users);
+                validUsers.add(user);
+            }
+        }
+
+        return ResponseEntity.ok(validUsers);
     }
 
     /**
