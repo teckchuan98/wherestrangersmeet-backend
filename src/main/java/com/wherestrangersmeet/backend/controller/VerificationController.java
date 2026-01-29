@@ -22,7 +22,7 @@ public class VerificationController {
 
     // IP Address -> List of timestamps
     private final Map<String, List<Instant>> requestCounts = new ConcurrentHashMap<>();
-    private static final int MAX_REQUESTS_PER_HOUR = 5;
+    private static final int MAX_REQUESTS_PER_HOUR = 30;
 
     @PostMapping("/photos")
     public ResponseEntity<Map<String, Object>> verifyPhotos(
