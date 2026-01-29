@@ -27,6 +27,10 @@ public class UserService {
         return userRepository.findById(id);
     }
 
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
     @Transactional
     public User createUserIfNew(String firebaseUid, String email, String name, String avatarUrl) {
         // First check by Firebase UID

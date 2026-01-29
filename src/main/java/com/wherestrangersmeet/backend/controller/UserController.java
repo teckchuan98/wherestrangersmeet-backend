@@ -23,6 +23,40 @@ public class UserController {
     private final FileStorageService fileStorageService;
 
     /**
+     * GET /api/users
+     * Get all users for the feed
+     */
+    @GetMapping
+    public ResponseEntity<List<User>> getAllUsers(@AuthenticationPrincipal FirebaseToken principal) {
+        // Optional: Require auth? Yes.
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        List<User> users = userService.getAllUsers();
+
+        // Remove current user from feed?
+        // String currentUid = principal.getUid();
+        // users.removeIf(u -> currentUid.equals(u.getFirebaseUid()));
+
+        // Process avatar URLs
+        users.forEach(user -> {
+            if (user.getAvatarUrl() != null && !user.getAvatarUrl().startsWith("http")) {
+                user.setAvatarUrl(fileStorageService.generatePresignedUrl(user.getAvatarUrl()));
+            }
+            if (user.getPhotos() != null) {
+                user.getPhotos().forEach(photo -> {
+                    if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
+                        photo.setUrl(fileStorageService.generatePresignedUrl(photo.getUrl()));
+                    }
+                });
+            }
+        });
+
+        return ResponseEntity.ok(users);
+    }
+
+    /**
      * GET /api/users/me
      * Get current user profile
      */
