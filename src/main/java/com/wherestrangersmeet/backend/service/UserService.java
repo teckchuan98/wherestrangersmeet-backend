@@ -141,9 +141,20 @@ public class UserService {
 
     @Transactional
     public void deleteUser(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new RuntimeException("User not found");
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Delete from Firebase Auth
+        if (user.getFirebaseUid() != null) {
+            try {
+                com.google.firebase.auth.FirebaseAuth.getInstance().deleteUser(user.getFirebaseUid());
+                System.out.println("Deleted user from Firebase: " + user.getFirebaseUid());
+            } catch (com.google.firebase.auth.FirebaseAuthException e) {
+                System.err.println("Failed to delete user from Firebase: " + e.getMessage());
+                // Continue to delete from local DB even if Firebase fails
+            }
         }
+
         userRepository.deleteById(id);
     }
 
