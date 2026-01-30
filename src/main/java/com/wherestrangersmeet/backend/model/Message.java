@@ -32,9 +32,15 @@ public class Message {
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Column(name = "is_read")
     @Builder.Default
     private Boolean isRead = false;
+
+    @Column(name = "message_type")
+    @Builder.Default
+    private String messageType = "TEXT"; // TEXT, IMAGE
+
+    @Column(name = "attachment_url")
+    private String attachmentUrl;
 
     // Ignoring order_id as it seems unrelated to direct messaging or is nullable
 }

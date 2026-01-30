@@ -16,21 +16,29 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
-    private final FileStorageService fileStorageService;
+    private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
 
     @Transactional
-    public Message sendMessage(Long senderId, Long receiverId, String text) {
+    public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl) {
         Message message = Message.builder()
                 .senderId(senderId)
                 .receiverId(receiverId)
                 .text(text)
+                .messageType(messageType)
+                .attachmentUrl(attachmentUrl)
                 .isRead(false)
                 .build();
         return messageRepository.save(message);
     }
 
     public List<Message> getConversation(Long userId1, Long userId2) {
-        return messageRepository.findConversation(userId1, userId2);
+        List<Message> messages = messageRepository.findConversation(userId1, userId2);
+        messages.forEach(m -> {
+            if (m.getAttachmentUrl() != null && !m.getAttachmentUrl().startsWith("http")) {
+                m.setAttachmentUrl(fileStorageService.generatePresignedUrl(m.getAttachmentUrl()));
+            }
+        });
+        return messages;
     }
 
     public List<Map<String, Object>> getConversations(Long userId) {

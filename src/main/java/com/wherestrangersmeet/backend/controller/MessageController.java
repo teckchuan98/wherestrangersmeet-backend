@@ -22,6 +22,7 @@ public class MessageController {
 
     private final MessageService messageService;
     private final UserService userService;
+    private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
 
     // Send a message
     @PostMapping
@@ -42,9 +43,27 @@ public class MessageController {
         }
 
         String text = (String) payload.get("text");
+        String messageType = (String) payload.getOrDefault("messageType", "TEXT");
+        String attachmentUrl = (String) payload.get("attachmentUrl");
 
-        Message message = messageService.sendMessage(sender.getId(), receiverId, text);
+        Message message = messageService.sendMessage(sender.getId(), receiverId, text, messageType, attachmentUrl);
         return ResponseEntity.ok(message);
+    }
+
+    // Generate Presigned Upload URL for Message Media
+    @PostMapping("/upload-url")
+    public ResponseEntity<Map<String, String>> getUploadUrl(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody Map<String, String> payload) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        String filename = payload.get("filename");
+        // Enforce message-media directory
+        Map<String, String> result = fileStorageService
+                .generatePresignedUploadUrl("message-media", filename);
+        return ResponseEntity.ok(result);
     }
 
     // Get conversation with a specific user
