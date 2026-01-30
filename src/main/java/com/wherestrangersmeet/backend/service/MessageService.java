@@ -29,6 +29,7 @@ public class MessageService {
                 .attachmentUrl(attachmentUrl)
                 .replyToId(replyToId)
                 .isRead(false)
+                .createdAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")))
                 .build();
         Message savedMessage = messageRepository.save(message);
 
