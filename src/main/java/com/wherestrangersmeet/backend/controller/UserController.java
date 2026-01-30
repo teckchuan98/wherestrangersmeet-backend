@@ -36,8 +36,9 @@ public class UserController {
         List<User> users = userService.getAllUsers();
 
         // Remove current user from feed?
-        // String currentUid = principal.getUid();
-        // users.removeIf(u -> currentUid.equals(u.getFirebaseUid()));
+        // Filter out the current user
+        String currentUid = principal.getUid();
+        users.removeIf(u -> currentUid.equals(u.getFirebaseUid()));
 
         // Process avatar URLs and filter users without photos
         List<User> validUsers = new java.util.ArrayList<>();

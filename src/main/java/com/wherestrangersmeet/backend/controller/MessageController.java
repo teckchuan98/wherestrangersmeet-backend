@@ -36,6 +36,11 @@ public class MessageController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         Long receiverId = ((Number) payload.get("receiverId")).longValue();
+
+        if (sender.getId().equals(receiverId)) {
+            return ResponseEntity.badRequest().build();
+        }
+
         String text = (String) payload.get("text");
 
         Message message = messageService.sendMessage(sender.getId(), receiverId, text);
