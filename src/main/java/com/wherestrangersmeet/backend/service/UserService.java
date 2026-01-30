@@ -166,7 +166,7 @@ public class UserService {
     @Transactional
     public void updateUserStatus(Long userId, boolean isOnline) {
         userRepository.findById(userId).ifPresent(user -> {
-            user.setOnline(isOnline);
+            user.setIsOnline(isOnline);
             user.setLastActive(LocalDateTime.now());
             userRepository.save(user);
         });

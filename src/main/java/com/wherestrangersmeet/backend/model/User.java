@@ -51,7 +51,7 @@ public class User {
     private Double rating = 0.0;
 
     @Column(name = "is_online")
-    private boolean isOnline = false;
+    private Boolean isOnline = false;
 
     @Column(name = "last_active")
     private LocalDateTime lastActive;
