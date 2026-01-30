@@ -39,7 +39,7 @@ public class Message {
     @Builder.Default
     private String messageType = "TEXT"; // TEXT, IMAGE
 
-    @Column(name = "attachment_url")
+    @Column(name = "attachment_url", columnDefinition = "TEXT")
     private String attachmentUrl;
 
     // Ignoring order_id as it seems unrelated to direct messaging or is nullable
