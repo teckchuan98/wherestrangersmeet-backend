@@ -287,6 +287,29 @@ public class UserController {
     }
 
     /**
+     * PUT /api/users/status
+     * Update user online status
+     */
+    @PutMapping("/status")
+    public ResponseEntity<?> updateStatus(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody Map<String, Boolean> request) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User user = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        Boolean isOnline = request.get("isOnline");
+        if (isOnline != null) {
+            userService.updateUserStatus(user.getId(), isOnline);
+        }
+
+        return ResponseEntity.ok().build();
+    }
+
+    /**
      * DELETE /api/users/me
      * Delete user account
      */

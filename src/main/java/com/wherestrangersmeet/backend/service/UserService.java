@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
 
@@ -160,6 +161,15 @@ public class UserService {
         }
 
         userRepository.deleteById(id);
+    }
+
+    @Transactional
+    public void updateUserStatus(Long userId, boolean isOnline) {
+        userRepository.findById(userId).ifPresent(user -> {
+            user.setOnline(isOnline);
+            user.setLastActive(LocalDateTime.now());
+            userRepository.save(user);
+        });
     }
 
     @Transactional

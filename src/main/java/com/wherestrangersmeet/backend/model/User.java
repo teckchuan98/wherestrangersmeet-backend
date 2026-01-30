@@ -50,6 +50,12 @@ public class User {
 
     private Double rating = 0.0;
 
+    @Column(name = "is_online")
+    private boolean isOnline = false;
+
+    @Column(name = "last_active")
+    private LocalDateTime lastActive;
+
     // Onboarding Fields
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
