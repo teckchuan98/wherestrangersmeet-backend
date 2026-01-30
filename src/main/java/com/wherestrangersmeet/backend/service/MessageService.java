@@ -58,9 +58,10 @@ public class MessageService {
             }
         });
 
-        // Backend query is DESC (newest first) for efficient pagination.
-        // We reverse it to ASC (oldest first) so frontend can simply append.
-        Collections.reverse(messages);
+        // Backend query is DESC (newest first).
+        // We now return it as-is (DESC) so frontend can use reverse ListView (Newest at
+        // index 0).
+        // Collections.reverse(messages); // REMOVED
 
         return messages;
     }
