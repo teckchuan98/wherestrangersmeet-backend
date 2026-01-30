@@ -74,7 +74,9 @@ public class MessageController {
     @GetMapping("/{otherUserId}")
     public ResponseEntity<List<Message>> getConversation(
             @AuthenticationPrincipal FirebaseToken principal,
-            @PathVariable Long otherUserId) {
+            @PathVariable Long otherUserId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
 
         if (principal == null)
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -82,7 +84,7 @@ public class MessageController {
         User currentUser = userService.getUserByFirebaseUid(principal.getUid())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        List<Message> messages = messageService.getConversation(currentUser.getId(), otherUserId);
+        List<Message> messages = messageService.getConversation(currentUser.getId(), otherUserId, page, size);
         return ResponseEntity.ok(messages);
     }
 
@@ -114,5 +116,24 @@ public class MessageController {
 
         messageService.markAsRead(currentUser.getId(), senderId);
         return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteMessage(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @PathVariable Long id) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User currentUser = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        try {
+            messageService.deleteMessage(id, currentUser.getId());
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
     }
 }

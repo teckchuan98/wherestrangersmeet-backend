@@ -35,6 +35,10 @@ public class Message {
     @Builder.Default
     private Boolean isRead = false;
 
+    @Column(name = "is_deleted")
+    @Builder.Default
+    private Boolean isDeleted = false;
+
     @Column(name = "message_type")
     @Builder.Default
     private String messageType = "TEXT"; // TEXT, IMAGE

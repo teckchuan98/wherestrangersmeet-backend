@@ -47,13 +47,21 @@ public class MessageService {
         return savedMessage;
     }
 
-    public List<Message> getConversation(Long userId1, Long userId2) {
-        List<Message> messages = messageRepository.findConversation(userId1, userId2);
+    public List<Message> getConversation(Long userId1, Long userId2, int page, int size) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        List<Message> messages = messageRepository.findConversation(userId1, userId2, pageable);
+
+        // Signed URL generation
         messages.forEach(m -> {
             if (m.getAttachmentUrl() != null && !m.getAttachmentUrl().startsWith("http")) {
                 m.setAttachmentUrl(fileStorageService.generatePresignedUrl(m.getAttachmentUrl()));
             }
         });
+
+        // Backend query is DESC (newest first) for efficient pagination.
+        // We reverse it to ASC (oldest first) so frontend can simply append.
+        Collections.reverse(messages);
+
         return messages;
     }
 
@@ -117,5 +125,18 @@ public class MessageService {
             unreadMessages.forEach(m -> m.setIsRead(true));
             messageRepository.saveAll(unreadMessages);
         }
+    }
+
+    @Transactional
+    public void deleteMessage(Long messageId, Long userId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        if (!message.getSenderId().equals(userId)) {
+            throw new RuntimeException("You can only delete your own messages");
+        }
+
+        message.setIsDeleted(true);
+        messageRepository.save(message);
     }
 }
