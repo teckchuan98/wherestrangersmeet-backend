@@ -19,4 +19,6 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     // Service layer can process them into conversations
     @Query("SELECT m FROM Message m WHERE m.senderId = :userId OR m.receiverId = :userId ORDER BY m.createdAt DESC")
     List<Message> findByUserId(@Param("userId") Long userId);
+
+    List<Message> findBySenderIdAndReceiverIdAndIsReadFalse(Long senderId, Long receiverId);
 }

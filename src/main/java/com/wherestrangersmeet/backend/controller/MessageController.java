@@ -100,4 +100,19 @@ public class MessageController {
         List<Map<String, Object>> conversations = messageService.getConversations(currentUser.getId());
         return ResponseEntity.ok(conversations);
     }
+
+    @PutMapping("/mark-read/{senderId}")
+    public ResponseEntity<Void> markAsRead(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @PathVariable Long senderId) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User currentUser = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        messageService.markAsRead(currentUser.getId(), senderId);
+        return ResponseEntity.ok().build();
+    }
 }

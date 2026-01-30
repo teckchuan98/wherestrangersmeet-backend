@@ -108,4 +108,14 @@ public class MessageService {
 
         return conversations;
     }
+
+    @Transactional
+    public void markAsRead(Long receiverId, Long senderId) {
+        List<Message> unreadMessages = messageRepository.findBySenderIdAndReceiverIdAndIsReadFalse(senderId,
+                receiverId);
+        if (!unreadMessages.isEmpty()) {
+            unreadMessages.forEach(m -> m.setIsRead(true));
+            messageRepository.saveAll(unreadMessages);
+        }
+    }
 }
