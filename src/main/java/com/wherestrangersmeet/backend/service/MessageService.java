@@ -59,6 +59,15 @@ public class MessageService {
                     partner.setAvatarUrl(fileStorageService.generatePresignedUrl(partner.getAvatarUrl()));
                 }
 
+                // Process Photos
+                if (partner.getPhotos() != null) {
+                    partner.getPhotos().forEach(photo -> {
+                        if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
+                            photo.setUrl(fileStorageService.generatePresignedUrl(photo.getUrl()));
+                        }
+                    });
+                }
+
                 Map<String, Object> conv = new HashMap<>();
                 conv.put("partner", partner);
                 conv.put("lastMessage", latest);
