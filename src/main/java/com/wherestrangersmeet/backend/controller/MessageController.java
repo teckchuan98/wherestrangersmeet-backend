@@ -45,7 +45,9 @@ public class MessageController {
         String text = (String) payload.get("text");
         String messageType = (String) payload.getOrDefault("messageType", "TEXT");
         String attachmentUrl = (String) payload.get("attachmentUrl");
-        Long replyToId = payload.containsKey("replyToId") ? ((Number) payload.get("replyToId")).longValue() : null;
+
+        Object replyToIdObj = payload.get("replyToId");
+        Long replyToId = replyToIdObj != null ? ((Number) replyToIdObj).longValue() : null;
 
         Message message = messageService.sendMessage(sender.getId(), receiverId, text, messageType, attachmentUrl,
                 replyToId);
