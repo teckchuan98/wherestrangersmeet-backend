@@ -42,5 +42,8 @@ public class Message {
     @Column(name = "attachment_url", columnDefinition = "TEXT")
     private String attachmentUrl;
 
+    @Column(name = "reply_to_id")
+    private Long replyToId;
+
     // Ignoring order_id as it seems unrelated to direct messaging or is nullable
 }

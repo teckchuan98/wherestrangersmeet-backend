@@ -19,13 +19,15 @@ public class MessageService {
     private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
 
     @Transactional
-    public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl) {
+    public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
+            Long replyToId) {
         Message message = Message.builder()
                 .senderId(senderId)
                 .receiverId(receiverId)
                 .text(text)
                 .messageType(messageType)
                 .attachmentUrl(attachmentUrl)
+                .replyToId(replyToId)
                 .isRead(false)
                 .build();
         Message savedMessage = messageRepository.save(message);
