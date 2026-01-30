@@ -173,6 +173,14 @@ public class UserService {
     }
 
     @Transactional
+    public void updateFcmToken(Long userId, String token) {
+        userRepository.findById(userId).ifPresent(user -> {
+            user.setFcmToken(token);
+            userRepository.save(user);
+        });
+    }
+
+    @Transactional
     public User updateInterestTags(Long id, List<String> tags) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));

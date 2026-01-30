@@ -56,6 +56,9 @@ public class User {
     @Column(name = "last_active")
     private LocalDateTime lastActive;
 
+    @Column(name = "fcm_token")
+    private String fcmToken;
+
     // Onboarding Fields
     @Enumerated(EnumType.STRING)
     @Column(length = 20)

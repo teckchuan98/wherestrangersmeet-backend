@@ -327,4 +327,27 @@ public class UserController {
 
         return ResponseEntity.ok(Map.of("message", "Account deleted successfully"));
     }
+
+    /**
+     * PUT /api/users/fcm-token
+     * Update user FCM token
+     */
+    @PutMapping("/fcm-token")
+    public ResponseEntity<?> updateFcmToken(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody Map<String, String> request) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User user = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        String token = request.get("token");
+        if (token != null) {
+            userService.updateFcmToken(user.getId(), token);
+        }
+
+        return ResponseEntity.ok().build();
+    }
 }

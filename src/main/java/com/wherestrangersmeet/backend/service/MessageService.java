@@ -17,6 +17,7 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
+    private final NotificationService notificationService;
 
     @Transactional
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
@@ -32,6 +33,23 @@ public class MessageService {
                 .createdAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")))
                 .build();
         Message savedMessage = messageRepository.save(message);
+
+        // Send Push Notification
+        userRepository.findById(receiverId).ifPresent(receiver -> {
+            if (receiver.getFcmToken() != null && !receiver.getFcmToken().isEmpty()) {
+                userRepository.findById(senderId).ifPresent(sender -> {
+                    String title = sender.getName();
+                    String body = "TEXT".equals(messageType) ? text : "Sent a " + messageType.toLowerCase();
+
+                    java.util.Map<String, String> data = new java.util.HashMap<>();
+                    data.put("type", "CHAT");
+                    data.put("senderId", String.valueOf(senderId));
+                    data.put("senderName", sender.getName());
+
+                    notificationService.sendNotification(receiver.getFcmToken(), title, body, data);
+                });
+            }
+        });
 
         // Presign for immediate display
         if (savedMessage.getAttachmentUrl() != null && !savedMessage.getAttachmentUrl().startsWith("http")) {
