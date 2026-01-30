@@ -28,7 +28,20 @@ public class MessageService {
                 .attachmentUrl(attachmentUrl)
                 .isRead(false)
                 .build();
-        return messageRepository.save(message);
+        Message savedMessage = messageRepository.save(message);
+
+        // Presign for immediate display
+        if (savedMessage.getAttachmentUrl() != null && !savedMessage.getAttachmentUrl().startsWith("http")) {
+            // We create a copy or modify the return object (it's persistent but we don't
+            // save again)
+            // Ideally we shouldn't modify the entity if it triggers an update, but we are
+            // returning it.
+            // To be safe, we can just modify the field on this instance as the transaction
+            // ends.
+            savedMessage.setAttachmentUrl(fileStorageService.generatePresignedUrl(savedMessage.getAttachmentUrl()));
+        }
+
+        return savedMessage;
     }
 
     public List<Message> getConversation(Long userId1, Long userId2) {
