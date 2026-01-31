@@ -43,6 +43,13 @@
             <version>9.4.2</version>
         </dependency>
 
+        <!-- Google Auth Library (explicit version to fix CredentialTypeForMetrics error) -->
+        <dependency>
+            <groupId>com.google.auth</groupId>
+            <artifactId>google-auth-library-oauth2-http</artifactId>
+            <version>1.23.0</version>
+        </dependency>
+
         <!-- PostgreSQL -->
         <dependency>
             <groupId>org.postgresql</groupId>
