@@ -135,11 +135,9 @@ public class UserService {
         photo.setUser(user);
         photo.setUrl(publicUrl);
 
-        // Set as avatar if none exists
-        if (user.getAvatarUrl() == null) {
-            user.setAvatarUrl(publicUrl);
-            userRepository.save(user); // Save user to update avatar
-        }
+        // Always update avatar URL to the new photo
+        user.setAvatarUrl(publicUrl);
+        userRepository.save(user);
 
         return userPhotoRepository.save(photo);
     }
