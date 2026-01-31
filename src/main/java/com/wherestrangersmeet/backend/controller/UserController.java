@@ -75,17 +75,19 @@ public class UserController {
      */
     @GetMapping("/me")
     public ResponseEntity<?> getUserProfile(@AuthenticationPrincipal FirebaseToken principal) {
-        System.out.println("========== GET /api/users/me ==========");
-        System.out.println("Principal: " + (principal != null ? principal.getUid() : "NULL"));
+        // System.out.println("========== GET /api/users/me ==========");
+        // System.out.println("Principal: " + (principal != null ? principal.getUid() :
+        // "NULL"));
 
         if (principal == null) {
-            System.err.println("ERROR: FirebaseToken principal is NULL - authentication failed!");
+            // System.err.println("ERROR: FirebaseToken principal is NULL - authentication
+            // failed!");
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Authentication failed - no valid Firebase token"));
         }
 
-        System.out.println("Email: " + principal.getEmail());
-        System.out.println("Name: " + principal.getName());
+        // System.out.println("Email: " + principal.getEmail());
+        // System.out.println("Name: " + principal.getName());
 
         // Automatically create user if they don't exist (Sync from Firebase)
         User user = userService.createUserIfNew(
@@ -94,8 +96,10 @@ public class UserController {
                 principal.getName(),
                 principal.getPicture());
 
-        System.out.println("User retrieved/created: ID=" + user.getId() + ", UID=" + user.getFirebaseUid());
-        System.out.println("Photos found: " + (user.getPhotos() != null ? user.getPhotos().size() : "NULL"));
+        // System.out.println("User retrieved/created: ID=" + user.getId() + ", UID=" +
+        // user.getFirebaseUid());
+        // System.out.println("Photos found: " + (user.getPhotos() != null ?
+        // user.getPhotos().size() : "NULL"));
 
         // Convert R2 keys to Presigned URLs
         if (user.getAvatarUrl() != null && !user.getAvatarUrl().startsWith("http")) {
@@ -112,7 +116,7 @@ public class UserController {
             });
         }
 
-        System.out.println("========================================");
+        // System.out.println("========================================");
 
         return ResponseEntity.ok(user);
     }
@@ -126,9 +130,10 @@ public class UserController {
             @AuthenticationPrincipal FirebaseToken principal,
             @RequestBody Map<String, Object> request) {
 
-        System.out.println("========== ONBOARDING REQUEST ==========");
-        System.out.println("Principal: " + (principal != null ? principal.getUid() : "NULL"));
-        System.out.println("Request body: " + request);
+        // System.out.println("========== ONBOARDING REQUEST ==========");
+        // System.out.println("Principal: " + (principal != null ? principal.getUid() :
+        // "NULL"));
+        // System.out.println("Request body: " + request);
 
         if (principal == null) {
             System.err.println("ERROR: FirebaseToken principal is NULL - authentication failed!");
@@ -136,7 +141,7 @@ public class UserController {
                     .body(Map.of("error", "Authentication failed - no valid Firebase token"));
         }
 
-        System.out.println("Looking up user by Firebase UID: " + principal.getUid());
+        // System.out.println("Looking up user by Firebase UID: " + principal.getUid());
 
         User user = userService.getUserByFirebaseUid(principal.getUid())
                 .orElseThrow(() -> {
@@ -144,7 +149,8 @@ public class UserController {
                     return new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
                 });
 
-        System.out.println("User found: ID=" + user.getId() + ", Name=" + user.getName());
+        // System.out.println("User found: ID=" + user.getId() + ", Name=" +
+        // user.getName());
 
         String genderStr = (String) request.get("gender");
         String futureGoals = (String) request.get("futureGoals");
@@ -177,8 +183,9 @@ public class UserController {
         User updatedUser = userService.updateOnboardingDetails(user.getId(), gender, futureGoals, occupationStatus,
                 occupationTitle, name, institution, occupationYear, occupationDescription, interestTags);
 
-        System.out.println("Onboarding updated successfully for user: " + updatedUser.getId());
-        System.out.println("========================================");
+        // System.out.println("Onboarding updated successfully for user: " +
+        // updatedUser.getId());
+        // System.out.println("========================================");
 
         return ResponseEntity.ok(updatedUser);
     }
