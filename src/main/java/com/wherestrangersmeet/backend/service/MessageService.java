@@ -69,8 +69,8 @@ public class MessageService {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
         List<Message> messages = messageRepository.findConversation(userId1, userId2, pageable);
 
-        // Signed URL generation
-        messages.forEach(m -> {
+        // Parallel presigned URL generation for better performance
+        messages.parallelStream().forEach(m -> {
             if (m.getAttachmentUrl() != null && !m.getAttachmentUrl().startsWith("http")) {
                 m.setAttachmentUrl(fileStorageService.generatePresignedUrl(m.getAttachmentUrl()));
             }
@@ -110,9 +110,9 @@ public class MessageService {
                     partner.setAvatarUrl(fileStorageService.generatePresignedUrl(partner.getAvatarUrl()));
                 }
 
-                // Process Photos
+                // Process Photos in parallel for better performance
                 if (partner.getPhotos() != null) {
-                    partner.getPhotos().forEach(photo -> {
+                    partner.getPhotos().parallelStream().forEach(photo -> {
                         if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
                             photo.setUrl(fileStorageService.generatePresignedUrl(photo.getUrl()));
                         }

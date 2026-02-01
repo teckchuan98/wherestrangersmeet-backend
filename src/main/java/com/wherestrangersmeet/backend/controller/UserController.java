@@ -56,7 +56,8 @@ public class UserController {
                     user.setAvatarUrl(fileStorageService.generatePresignedUrl(user.getAvatarUrl()));
                 }
 
-                user.getPhotos().forEach(photo -> {
+                // Parallel presigned URL generation for better performance
+                user.getPhotos().parallelStream().forEach(photo -> {
                     if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
                         photo.setUrl(fileStorageService.generatePresignedUrl(photo.getUrl()));
                     }
@@ -107,8 +108,9 @@ public class UserController {
             user.setAvatarUrl(presigned);
         }
 
+        // Parallel presigned URL generation for better performance
         if (user.getPhotos() != null) {
-            user.getPhotos().forEach(photo -> {
+            user.getPhotos().parallelStream().forEach(photo -> {
                 if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
                     String presigned = fileStorageService.generatePresignedUrl(photo.getUrl());
                     photo.setUrl(presigned);

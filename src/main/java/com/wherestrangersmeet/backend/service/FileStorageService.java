@@ -2,6 +2,7 @@ package com.wherestrangersmeet.backend.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -73,6 +74,7 @@ public class FileStorageService {
         return s3Client.getObject(getObjectRequest);
     }
 
+    @Cacheable(value = "presignedUrls", key = "#key", unless = "#key == null || #key.startsWith('http')")
     public String generatePresignedUrl(String key) {
         // If it's already a URL, return it
         if (key == null || key.startsWith("http")) {
@@ -92,7 +94,9 @@ public class FileStorageService {
                     .getObjectRequest(getObjectRequest)
                     .build();
 
-            return s3Presigner.presignGetObject(presignRequest).url().toString();
+            String presignedUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
+            System.out.println("Generated new presigned URL for key: " + key);
+            return presignedUrl;
 
         } catch (Exception e) {
             System.err.println("Error generating presigned URL: " + e.getMessage());
