@@ -17,17 +17,19 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
+    private final MediaFileService mediaFileService;
     private final NotificationService notificationService;
     private final org.springframework.messaging.simp.SimpMessagingTemplate simpMessagingTemplate;
 
     @Transactional
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
-            Long replyToId) {
-        return sendMessage(senderId, receiverId, text, messageType, attachmentUrl, replyToId, true);
+            Long replyToId, String attachmentHash) {
+        return sendMessage(senderId, receiverId, text, messageType, attachmentUrl, replyToId, attachmentHash, true);
     }
 
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
-            Long replyToId, boolean broadcast) {
+            Long replyToId, String attachmentHash, boolean broadcast) {
+        final String rawAttachmentUrl = attachmentUrl;
         Message message = Message.builder()
                 .senderId(senderId)
                 .receiverId(receiverId)
@@ -39,6 +41,10 @@ public class MessageService {
                 .createdAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")))
                 .build();
         Message savedMessage = messageRepository.save(message);
+
+        if (attachmentHash != null && rawAttachmentUrl != null && !rawAttachmentUrl.startsWith("http")) {
+            mediaFileService.recordIfAbsent(attachmentHash, rawAttachmentUrl);
+        }
 
         // Presign for immediate display (Critical for real-time WebSocket)
         if (savedMessage.getAttachmentUrl() != null) {

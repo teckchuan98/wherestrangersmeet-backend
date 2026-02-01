@@ -27,6 +27,7 @@ public class MessageController {
     private final UserService userService;
     private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final com.wherestrangersmeet.backend.service.MediaFileService mediaFileService;
 
     // Send a message via HTTP
     @PostMapping
@@ -49,12 +50,13 @@ public class MessageController {
         String text = (String) payload.get("text");
         String messageType = (String) payload.getOrDefault("messageType", "TEXT");
         String attachmentUrl = (String) payload.get("attachmentUrl");
+        String attachmentHash = (String) payload.get("attachmentHash");
 
         Object replyToIdObj = payload.get("replyToId");
         Long replyToId = replyToIdObj != null ? ((Number) replyToIdObj).longValue() : null;
 
         Message message = messageService.sendMessage(sender.getId(), receiverId, text, messageType, attachmentUrl,
-                replyToId);
+                replyToId, attachmentHash);
         return ResponseEntity.ok(message);
     }
 
@@ -81,13 +83,14 @@ public class MessageController {
             String text = (String) payload.get("text");
             String messageType = (String) payload.getOrDefault("messageType", "TEXT");
             String attachmentUrl = (String) payload.get("attachmentUrl");
+            String attachmentHash = (String) payload.get("attachmentHash");
 
             Object replyToIdObj = payload.get("replyToId");
             Long replyToId = replyToIdObj != null ? ((Number) replyToIdObj).longValue() : null;
 
             // Save message
             Message savedMessage = messageService.sendMessage(sender.getId(), receiverId, text, messageType,
-                    attachmentUrl, replyToId, false);
+                    attachmentUrl, replyToId, attachmentHash, false);
 
             // Send to RECEIVER (ensure WS payload includes presigned URL)
             userService.getUserById(receiverId).ifPresent(receiver -> {
@@ -153,9 +156,23 @@ public class MessageController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
 
         String filename = payload.get("filename");
+        String contentHash = payload.get("hash");
+
+        if (contentHash != null && !contentHash.isBlank()) {
+            java.util.Optional<com.wherestrangersmeet.backend.model.MediaFile> existing = mediaFileService
+                    .findByHash(contentHash);
+            if (existing.isPresent()) {
+                java.util.Map<String, String> result = new java.util.HashMap<>();
+                result.put("key", existing.get().getObjectKey());
+                result.put("exists", "true");
+                return ResponseEntity.ok(result);
+            }
+        }
+
         // Enforce message-media directory
         Map<String, String> result = fileStorageService
                 .generatePresignedUploadUrl("message-media", filename);
+        result.put("exists", "false");
         return ResponseEntity.ok(result);
     }
 
