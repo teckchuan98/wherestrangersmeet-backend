@@ -87,9 +87,18 @@ public class MessageController {
 
             // Save message
             Message savedMessage = messageService.sendMessage(sender.getId(), receiverId, text, messageType,
-                    attachmentUrl, replyToId);
+                    attachmentUrl, replyToId, false);
 
-            // CRITICAL: Send message back to SENDER (for optimistic UI reconciliation)
+            // Send to RECEIVER (ensure WS payload includes presigned URL)
+            userService.getUserById(receiverId).ifPresent(receiver -> {
+                if (receiver.getFirebaseUid() != null) {
+                    messagingTemplate.convertAndSendToUser(
+                            receiver.getFirebaseUid(),
+                            "/queue/messages",
+                            savedMessage);
+                }
+            });
+
             messagingTemplate.convertAndSendToUser(
                     principal.getName(),
                     "/queue/messages",
@@ -155,8 +164,9 @@ public class MessageController {
     public ResponseEntity<List<Message>> getConversation(
             @AuthenticationPrincipal FirebaseToken principal,
             @PathVariable Long otherUserId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String beforeCreatedAt,
+            @RequestParam(required = false) Long beforeId) {
 
         if (principal == null)
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -164,7 +174,17 @@ public class MessageController {
         User currentUser = userService.getUserByFirebaseUid(principal.getUid())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        List<Message> messages = messageService.getConversation(currentUser.getId(), otherUserId, page, size);
+        java.time.LocalDateTime beforeCreated = null;
+        if (beforeCreatedAt != null && beforeId != null) {
+            try {
+                beforeCreated = java.time.OffsetDateTime.parse(beforeCreatedAt).toLocalDateTime();
+            } catch (java.time.format.DateTimeParseException e) {
+                beforeCreated = java.time.LocalDateTime.parse(beforeCreatedAt);
+            }
+        }
+
+        List<Message> messages = messageService.getConversation(currentUser.getId(), otherUserId, size, beforeCreated,
+                beforeId);
         return ResponseEntity.ok(messages);
     }
 

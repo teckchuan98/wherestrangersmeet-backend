@@ -74,7 +74,7 @@ public class FileStorageService {
         return s3Client.getObject(getObjectRequest);
     }
 
-    @Cacheable(value = "presignedUrls", key = "#key")
+    // @Cacheable(value = "presignedUrls", key = "#key") // Disabled for debugging
     public String generatePresignedUrl(String key) {
         if (key == null) {
             return null;
@@ -117,11 +117,12 @@ public class FileStorageService {
                     .build();
 
             String presignedUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
-            // System.out.println("Generated new presigned URL for key: " + cleanKey);
+            System.out.println("✅ Generated presigned URL for key [" + cleanKey + "]: " + presignedUrl);
             return presignedUrl;
 
         } catch (Exception e) {
-            System.err.println("Error generating presigned URL: " + e.getMessage());
+            System.err.println("❌ Error generating presigned URL for key [" + cleanKey + "]: " + e.getMessage());
+            e.printStackTrace();
             return key; // Fallback to key
         }
     }

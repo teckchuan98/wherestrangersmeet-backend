@@ -23,6 +23,11 @@ public class MessageService {
     @Transactional
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
             Long replyToId) {
+        return sendMessage(senderId, receiverId, text, messageType, attachmentUrl, replyToId, true);
+    }
+
+    public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
+            Long replyToId, boolean broadcast) {
         Message message = Message.builder()
                 .senderId(senderId)
                 .receiverId(receiverId)
@@ -35,10 +40,19 @@ public class MessageService {
                 .build();
         Message savedMessage = messageRepository.save(message);
 
+        // Presign for immediate display (Critical for real-time WebSocket)
+        if (savedMessage.getAttachmentUrl() != null) {
+            String originalUrl = savedMessage.getAttachmentUrl();
+            String presigned = fileStorageService.generatePresignedUrl(originalUrl);
+            System.out.println("🔄 [MessageService] Presigning URL for msg " + savedMessage.getId() + ": " + originalUrl
+                    + " -> " + presigned);
+            savedMessage.setAttachmentUrl(presigned);
+        }
+
         // Send Push Notification & WebSocket Update
         userRepository.findById(receiverId).ifPresent(receiver -> {
             // WebSocket Push (Fastest)
-            if (receiver.getFirebaseUid() != null) {
+            if (broadcast && receiver.getFirebaseUid() != null) {
                 simpMessagingTemplate.convertAndSendToUser(
                         receiver.getFirebaseUid(),
                         "/queue/messages",
@@ -61,17 +75,24 @@ public class MessageService {
             }
         });
 
-        // Presign for immediate display
-        if (savedMessage.getAttachmentUrl() != null) {
-            savedMessage.setAttachmentUrl(fileStorageService.generatePresignedUrl(savedMessage.getAttachmentUrl()));
-        }
+        // (Presigned URL already set above)
 
         return savedMessage;
     }
 
     public List<Message> getConversation(Long userId1, Long userId2, int page, int size) {
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
-        List<Message> messages = messageRepository.findConversation(userId1, userId2, pageable);
+        return getConversation(userId1, userId2, size, null, null);
+    }
+
+    public List<Message> getConversation(Long userId1, Long userId2, int size,
+            java.time.LocalDateTime beforeCreatedAt, Long beforeId) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, size);
+        List<Message> messages;
+        if (beforeCreatedAt != null && beforeId != null) {
+            messages = messageRepository.findConversationBefore(userId1, userId2, beforeCreatedAt, beforeId, pageable);
+        } else {
+            messages = messageRepository.findConversation(userId1, userId2, pageable);
+        }
 
         // Parallel presigned URL generation for better performance
         messages.parallelStream().forEach(m -> {
