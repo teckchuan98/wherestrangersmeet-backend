@@ -18,6 +18,7 @@ public class MessageService {
     private final UserRepository userRepository;
     private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
     private final NotificationService notificationService;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate simpMessagingTemplate;
 
     @Transactional
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
@@ -34,8 +35,17 @@ public class MessageService {
                 .build();
         Message savedMessage = messageRepository.save(message);
 
-        // Send Push Notification
+        // Send Push Notification & WebSocket Update
         userRepository.findById(receiverId).ifPresent(receiver -> {
+            // WebSocket Push (Fastest)
+            if (receiver.getFirebaseUid() != null) {
+                simpMessagingTemplate.convertAndSendToUser(
+                        receiver.getFirebaseUid(),
+                        "/queue/messages",
+                        savedMessage);
+            }
+
+            // Firebase Push Notification (Async, persistent)
             if (receiver.getFcmToken() != null && !receiver.getFcmToken().isEmpty()) {
                 userRepository.findById(senderId).ifPresent(sender -> {
                     String title = sender.getName();
