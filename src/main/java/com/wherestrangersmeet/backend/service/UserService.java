@@ -11,6 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +23,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserPhotoRepository userPhotoRepository;
     private final FileStorageService fileStorageService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public Optional<User> getUserByFirebaseUid(String firebaseUid) {
         return userRepository.findByFirebaseUid(firebaseUid);
@@ -30,6 +35,11 @@ public class UserService {
 
     public List<User> getAllUsers() {
         return userRepository.findAll();
+    }
+
+    public org.springframework.data.domain.Page<User> getFeedUsers(String currentUid, int page, int size) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        return userRepository.findByFirebaseUidNotAndPhotosIsNotEmpty(currentUid, pageable);
     }
 
     @Transactional
@@ -167,6 +177,19 @@ public class UserService {
             user.setIsOnline(isOnline);
             user.setLastActive(LocalDateTime.now());
             userRepository.save(user);
+
+            // Broadcast presence update to ALL users via WebSocket
+            Map<String, Object> presenceUpdate = new HashMap<>();
+            presenceUpdate.put("userId", userId);
+            presenceUpdate.put("isOnline", isOnline);
+            presenceUpdate.put("timestamp", System.currentTimeMillis());
+
+            // Send to /topic/presence (public topic that all connected users can subscribe
+            // to)
+            messagingTemplate.convertAndSend("/topic/presence", presenceUpdate);
+
+            System.out.println(
+                    "📡 Broadcasted presence update: User " + userId + " is " + (isOnline ? "ONLINE" : "OFFLINE"));
         });
     }
 

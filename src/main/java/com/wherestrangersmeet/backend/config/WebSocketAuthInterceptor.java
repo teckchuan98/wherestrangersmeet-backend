@@ -2,8 +2,8 @@ package com.wherestrangersmeet.backend.config;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseToken;
-import lombok.RequiredArgsConstructor;
-// import org.springframework.context.annotation.Configuration; // Removed unused import depending on strictness, or just remove line
+import com.wherestrangersmeet.backend.service.UserService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -18,8 +18,14 @@ import java.util.Collections;
 import java.util.List;
 
 @Component
-@RequiredArgsConstructor
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
+
+    private final UserService userService;
+
+    // Use @Lazy to break circular dependency
+    public WebSocketAuthInterceptor(@Lazy UserService userService) {
+        this.userService = userService;
+    }
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -40,14 +46,24 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     accessor.setUser(authentication);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                    System.out.println("✅ WebSocket Connected: " + decodedToken.getUid());
+                    // Mark user as ONLINE when WebSocket connects
+                    userService.getUserByFirebaseUid(decodedToken.getUid()).ifPresent(user -> {
+                        userService.updateUserStatus(user.getId(), true);
+                        System.out.println("✅ WebSocket Connected: " + decodedToken.getUid() + " - User marked ONLINE");
+                    });
+
                 } catch (Exception e) {
                     System.out.println("❌ WebSocket Auth Failed: " + e.getMessage());
-                    // Don't throw exception to avoid crashing entire broker for one user,
-                    // just don't set user (connection might still succeed but be unauthenticated
-                    // depending on security config)
-                    // Or strictly: throw new IllegalArgumentException("Invalid Token");
                 }
+            }
+        } else if (StompCommand.DISCONNECT.equals(accessor.getCommand())) {
+            // Mark user as OFFLINE when WebSocket disconnects
+            if (accessor.getUser() != null) {
+                String firebaseUid = accessor.getUser().getName();
+                userService.getUserByFirebaseUid(firebaseUid).ifPresent(user -> {
+                    userService.updateUserStatus(user.getId(), false);
+                    System.out.println("🔴 WebSocket Disconnected: " + firebaseUid + " - User marked OFFLINE");
+                });
             }
         }
         return message;

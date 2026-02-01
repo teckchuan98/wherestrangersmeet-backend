@@ -74,18 +74,40 @@ public class FileStorageService {
         return s3Client.getObject(getObjectRequest);
     }
 
-    @Cacheable(value = "presignedUrls", key = "#key", unless = "#key == null || #key.startsWith('http')")
+    @Cacheable(value = "presignedUrls", key = "#key")
     public String generatePresignedUrl(String key) {
-        // If it's already a URL, return it
-        if (key == null || key.startsWith("http")) {
-            return key;
+        if (key == null) {
+            return null;
+        }
+
+        // Logic to extract KEY from full URL if mistakenly saved
+        // We know our internal keys contain "message-media/" or "user-photos/"
+        String cleanKey = key;
+        if (key.startsWith("http")) {
+            if (key.contains("message-media/")) {
+                cleanKey = key.substring(key.indexOf("message-media/"));
+                // Remove any query params if present in the stored string
+                if (cleanKey.contains("?")) {
+                    cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
+                }
+                System.out.println("♻️ Recovered key from URL: " + cleanKey);
+            } else if (key.contains("user-photos/")) {
+                cleanKey = key.substring(key.indexOf("user-photos/"));
+                if (cleanKey.contains("?")) {
+                    cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
+                }
+                System.out.println("♻️ Recovered key from URL: " + cleanKey);
+            } else {
+                // Genuine external URL (e.g. Google Auth)
+                return key;
+            }
         }
 
         try {
             software.amazon.awssdk.services.s3.model.GetObjectRequest getObjectRequest = software.amazon.awssdk.services.s3.model.GetObjectRequest
                     .builder()
                     .bucket(bucketName)
-                    .key(key)
+                    .key(cleanKey)
                     .build();
 
             software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest presignRequest = software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
@@ -95,7 +117,7 @@ public class FileStorageService {
                     .build();
 
             String presignedUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
-            System.out.println("Generated new presigned URL for key: " + key);
+            // System.out.println("Generated new presigned URL for key: " + cleanKey);
             return presignedUrl;
 
         } catch (Exception e) {

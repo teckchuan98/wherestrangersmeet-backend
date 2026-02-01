@@ -27,47 +27,39 @@ public class UserController {
      * Get all users for the feed
      */
     @GetMapping
-    public ResponseEntity<List<User>> getAllUsers(@AuthenticationPrincipal FirebaseToken principal) {
-        // Optional: Require auth? Yes.
+    public ResponseEntity<List<User>> getAllUsers(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
         if (principal == null) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        List<User> users = userService.getAllUsers();
-
-        // Remove current user from feed?
-        // Filter out the current user
         String currentUid = principal.getUid();
-        users.removeIf(u -> currentUid.equals(u.getFirebaseUid()));
 
-        // Process avatar URLs and filter users without photos
-        List<User> validUsers = new java.util.ArrayList<>();
+        // Use the paginated service method
+        org.springframework.data.domain.Page<User> userPage = userService.getFeedUsers(currentUid, page, size);
+        List<User> users = userPage.getContent();
 
-        for (User user : users) {
-            // boolean hasAvatar = user.getAvatarUrl() != null &&
-            // !user.getAvatarUrl().isEmpty();
-            // User requested to ONLY show users with Cloudflare photos, ignoring Gmail
-            // avatars
-            boolean hasPhotos = user.getPhotos() != null && !user.getPhotos().isEmpty();
+        // Process avatar URLs and photos for the current page
+        users.parallelStream().forEach(user -> {
+            // Process avatar
+            if (user.getAvatarUrl() != null) {
+                user.setAvatarUrl(fileStorageService.generatePresignedUrl(user.getAvatarUrl()));
+            }
 
-            if (hasPhotos) {
-                // Still process avatar in case we need it as fallback or for detail view
-                if (user.getAvatarUrl() != null && !user.getAvatarUrl().startsWith("http")) {
-                    user.setAvatarUrl(fileStorageService.generatePresignedUrl(user.getAvatarUrl()));
-                }
-
-                // Parallel presigned URL generation for better performance
+            // Process photos
+            if (user.getPhotos() != null) {
                 user.getPhotos().parallelStream().forEach(photo -> {
-                    if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
+                    if (photo.getUrl() != null) {
                         photo.setUrl(fileStorageService.generatePresignedUrl(photo.getUrl()));
                     }
                 });
-
-                validUsers.add(user);
             }
-        }
+        });
 
-        return ResponseEntity.ok(validUsers);
+        return ResponseEntity.ok(users);
     }
 
     /**
@@ -103,7 +95,7 @@ public class UserController {
         // user.getPhotos().size() : "NULL"));
 
         // Convert R2 keys to Presigned URLs
-        if (user.getAvatarUrl() != null && !user.getAvatarUrl().startsWith("http")) {
+        if (user.getAvatarUrl() != null) {
             String presigned = fileStorageService.generatePresignedUrl(user.getAvatarUrl());
             user.setAvatarUrl(presigned);
         }
@@ -111,7 +103,7 @@ public class UserController {
         // Parallel presigned URL generation for better performance
         if (user.getPhotos() != null) {
             user.getPhotos().parallelStream().forEach(photo -> {
-                if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
+                if (photo.getUrl() != null) {
                     String presigned = fileStorageService.generatePresignedUrl(photo.getUrl());
                     photo.setUrl(presigned);
                 }
@@ -262,7 +254,7 @@ public class UserController {
             var photo = userService.addUserPhoto(user.getId(), key);
 
             // Convert to Presigned URL for immediate display
-            if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
+            if (photo.getUrl() != null) {
                 String presigned = fileStorageService.generatePresignedUrl(photo.getUrl());
                 photo.setUrl(presigned);
             }

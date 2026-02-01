@@ -62,13 +62,7 @@ public class MessageService {
         });
 
         // Presign for immediate display
-        if (savedMessage.getAttachmentUrl() != null && !savedMessage.getAttachmentUrl().startsWith("http")) {
-            // We create a copy or modify the return object (it's persistent but we don't
-            // save again)
-            // Ideally we shouldn't modify the entity if it triggers an update, but we are
-            // returning it.
-            // To be safe, we can just modify the field on this instance as the transaction
-            // ends.
+        if (savedMessage.getAttachmentUrl() != null) {
             savedMessage.setAttachmentUrl(fileStorageService.generatePresignedUrl(savedMessage.getAttachmentUrl()));
         }
 
@@ -81,7 +75,7 @@ public class MessageService {
 
         // Parallel presigned URL generation for better performance
         messages.parallelStream().forEach(m -> {
-            if (m.getAttachmentUrl() != null && !m.getAttachmentUrl().startsWith("http")) {
+            if (m.getAttachmentUrl() != null) {
                 m.setAttachmentUrl(fileStorageService.generatePresignedUrl(m.getAttachmentUrl()));
             }
         });
@@ -116,14 +110,14 @@ public class MessageService {
             if (partnerOpt.isPresent()) {
                 User partner = partnerOpt.get();
                 // Process Avatar URL
-                if (partner.getAvatarUrl() != null && !partner.getAvatarUrl().startsWith("http")) {
+                if (partner.getAvatarUrl() != null) {
                     partner.setAvatarUrl(fileStorageService.generatePresignedUrl(partner.getAvatarUrl()));
                 }
 
                 // Process Photos in parallel for better performance
                 if (partner.getPhotos() != null) {
                     partner.getPhotos().parallelStream().forEach(photo -> {
-                        if (photo.getUrl() != null && !photo.getUrl().startsWith("http")) {
+                        if (photo.getUrl() != null) {
                             photo.setUrl(fileStorageService.generatePresignedUrl(photo.getUrl()));
                         }
                     });
@@ -152,7 +146,25 @@ public class MessageService {
                 receiverId);
         if (!unreadMessages.isEmpty()) {
             unreadMessages.forEach(m -> m.setIsRead(true));
-            messageRepository.saveAll(unreadMessages);
+            List<Message> savedMessages = messageRepository.saveAll(unreadMessages);
+
+            // Send WebSocket update to SENDER for each read message (blue tick update)
+            userRepository.findById(senderId).ifPresent(sender -> {
+                if (sender.getFirebaseUid() != null) {
+                    savedMessages.forEach(message -> {
+                        // Presign attachment URL if needed
+                        if (message.getAttachmentUrl() != null) {
+                            message.setAttachmentUrl(
+                                    fileStorageService.generatePresignedUrl(message.getAttachmentUrl()));
+                        }
+
+                        simpMessagingTemplate.convertAndSendToUser(
+                                sender.getFirebaseUid(),
+                                "/queue/messages",
+                                message);
+                    });
+                }
+            });
         }
     }
 

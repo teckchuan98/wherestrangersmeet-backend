@@ -8,10 +8,13 @@ import com.wherestrangersmeet.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 
@@ -23,8 +26,9 @@ public class MessageController {
     private final MessageService messageService;
     private final UserService userService;
     private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    // Send a message
+    // Send a message via HTTP
     @PostMapping
     public ResponseEntity<Message> sendMessage(
             @AuthenticationPrincipal FirebaseToken principal,
@@ -52,6 +56,82 @@ public class MessageController {
         Message message = messageService.sendMessage(sender.getId(), receiverId, text, messageType, attachmentUrl,
                 replyToId);
         return ResponseEntity.ok(message);
+    }
+
+    // Send a message via WebSocket
+    @MessageMapping("/chat.sendMessage")
+    public void handleWebSocketMessage(Map<String, Object> payload, Principal principal) {
+        if (principal == null) {
+            System.err.println("❌ WebSocket message received without authentication");
+            return;
+        }
+
+        try {
+            // Get sender from Firebase UID in principal
+            User sender = userService.getUserByFirebaseUid(principal.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found: " + principal.getName()));
+
+            Long receiverId = ((Number) payload.get("receiverId")).longValue();
+
+            if (sender.getId().equals(receiverId)) {
+                System.err.println("❌ Cannot send message to yourself");
+                return;
+            }
+
+            String text = (String) payload.get("text");
+            String messageType = (String) payload.getOrDefault("messageType", "TEXT");
+            String attachmentUrl = (String) payload.get("attachmentUrl");
+
+            Object replyToIdObj = payload.get("replyToId");
+            Long replyToId = replyToIdObj != null ? ((Number) replyToIdObj).longValue() : null;
+
+            // Save message
+            Message savedMessage = messageService.sendMessage(sender.getId(), receiverId, text, messageType,
+                    attachmentUrl, replyToId);
+
+            // CRITICAL: Send message back to SENDER (for optimistic UI reconciliation)
+            messagingTemplate.convertAndSendToUser(
+                    principal.getName(),
+                    "/queue/messages",
+                    savedMessage);
+
+            System.out.println("✅ WebSocket message sent successfully: " + savedMessage.getId());
+
+        } catch (Exception e) {
+            System.err.println("❌ Error handling WebSocket message: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    // Handle typing indicator via WebSocket
+    @MessageMapping("/chat.typing")
+    public void handleTypingStatus(Map<String, Object> payload, Principal principal) {
+        if (principal == null) {
+            return;
+        }
+
+        try {
+            Long receiverId = ((Number) payload.get("receiverId")).longValue();
+            Boolean isTyping = (Boolean) payload.get("isTyping");
+
+            // Get receiver's Firebase UID
+            userService.getUserById(receiverId).ifPresent(receiver -> {
+                if (receiver.getFirebaseUid() != null) {
+                    // Send typing status to receiver
+                    Map<String, Object> typingUpdate = new java.util.HashMap<>();
+                    typingUpdate.put("isTyping", isTyping);
+                    typingUpdate.put("timestamp", System.currentTimeMillis());
+
+                    messagingTemplate.convertAndSendToUser(
+                            receiver.getFirebaseUid(),
+                            "/queue/typing",
+                            typingUpdate);
+                }
+            });
+
+        } catch (Exception e) {
+            System.err.println("❌ Error handling typing status: " + e.getMessage());
+        }
     }
 
     // Generate Presigned Upload URL for Message Media
