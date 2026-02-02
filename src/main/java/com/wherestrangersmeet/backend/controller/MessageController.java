@@ -41,9 +41,6 @@ public class MessageController {
         User sender = userService.getUserByFirebaseUid(principal.getUid())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        // Update sender's lastActive timestamp (heartbeat)
-        userService.updateLastActive(sender.getId());
-
         Long receiverId = ((Number) payload.get("receiverId")).longValue();
 
         if (sender.getId().equals(receiverId)) {
@@ -75,9 +72,6 @@ public class MessageController {
             // Get sender from Firebase UID in principal
             User sender = userService.getUserByFirebaseUid(principal.getName())
                     .orElseThrow(() -> new RuntimeException("User not found: " + principal.getName()));
-
-            // Update sender's lastActive timestamp (heartbeat)
-            userService.updateLastActive(sender.getId());
 
             Long receiverId = ((Number) payload.get("receiverId")).longValue();
 
@@ -129,11 +123,6 @@ public class MessageController {
         }
 
         try {
-            // Get sender and update lastActive (heartbeat)
-            User sender = userService.getUserByFirebaseUid(principal.getName())
-                    .orElseThrow(() -> new RuntimeException("User not found: " + principal.getName()));
-            userService.updateLastActive(sender.getId());
-
             Long receiverId = ((Number) payload.get("receiverId")).longValue();
             Boolean isTyping = (Boolean) payload.get("isTyping");
 

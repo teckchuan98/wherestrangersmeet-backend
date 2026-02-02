@@ -188,29 +188,8 @@ public class UserService {
             // to)
             messagingTemplate.convertAndSend("/topic/presence", presenceUpdate);
 
-            // System.out.println(
-            //         "📡 Broadcasted presence update: User " + userId + " is " + (isOnline ? "ONLINE" : "OFFLINE"));
-        });
-    }
-
-    /**
-     * Updates user's lastActive timestamp without changing online status.
-     * Call this on any user activity (messages, typing, etc.) to keep presence fresh.
-     */
-    @Transactional
-    public void updateLastActive(Long userId) {
-        userRepository.findById(userId).ifPresent(user -> {
-            LocalDateTime now = LocalDateTime.now();
-            user.setLastActive(now);
-            userRepository.save(user);
-
-            // Broadcast presence update with fresh timestamp
-            Map<String, Object> presenceUpdate = new HashMap<>();
-            presenceUpdate.put("userId", userId);
-            presenceUpdate.put("isOnline", user.getIsOnline());
-            presenceUpdate.put("timestamp", System.currentTimeMillis());
-
-            messagingTemplate.convertAndSend("/topic/presence", presenceUpdate);
+            System.out.println(
+                    "📡 Broadcasted presence update: User " + userId + " is " + (isOnline ? "ONLINE" : "OFFLINE"));
         });
     }
 

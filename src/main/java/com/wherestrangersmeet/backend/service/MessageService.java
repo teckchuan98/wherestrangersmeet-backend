@@ -86,23 +86,6 @@ public class MessageService {
         return savedMessage;
     }
 
-    @Transactional
-    public Message sendSelfieRequestMessage(Long senderId, Long receiverId, Long selfieRequestId,
-            java.time.LocalDateTime expiresAt) {
-        Message message = Message.builder()
-                .senderId(senderId)
-                .receiverId(receiverId)
-                .text("Selfie request")
-                .messageType("SELFIE_REQUEST")
-                .selfieRequestId(selfieRequestId)
-                .selfieExpiresAt(expiresAt)
-                .isRead(false)
-                .createdAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")))
-                .build();
-
-        return messageRepository.save(message);
-    }
-
     public List<Message> getConversation(Long userId1, Long userId2, int page, int size) {
         return getConversation(userId1, userId2, size, null, null);
     }
