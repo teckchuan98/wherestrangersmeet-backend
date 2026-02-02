@@ -27,6 +27,7 @@ public class AiService {
     private final UserRepository userRepository;
     private final com.wherestrangersmeet.backend.repository.MessageRepository messageRepository; // Added for
                                                                                                  // context/vision
+    private final FileStorageService fileStorageService;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -34,14 +35,18 @@ public class AiService {
     // Generous token budget to allow context reading, but cap to prevent abuse
     private static final int MAX_INPUT_TOKENS = 10000;
 
-    public AiResponse generateResponse(List<Message> history, Message triggerMessage) {
+    public enum AiMode {
+        BRIEF, DETAILED
+    }
+
+    public AiResponse generateResponse(List<Message> history, Message triggerMessage, AiMode mode) {
         try {
             // 1. Analyze for Vision (On-Demand)
             String imageUrl = detectRelevantImage(triggerMessage);
 
             // 2. Construct Transcript (with Reply Context & Privacy)
             String transcript = constructTranscript(history, triggerMessage);
-            String systemPrompt = getSystemPrompt();
+            String systemPrompt = getSystemPrompt(mode);
 
             // 3. Prepare Request Body
             Map<String, Object> requestBody = new HashMap<>();
@@ -158,8 +163,13 @@ public class AiService {
             }
 
             // Lazy load name
-            String name = userNames.computeIfAbsent(msg.getSenderId(),
-                    id -> userRepository.findById(id).map(u -> u.getName()).orElse("User " + id));
+            String name;
+            if (msg.getMessageType() != null && msg.getMessageType().startsWith("AI_")) {
+                name = "MOMO AI";
+            } else {
+                name = userNames.computeIfAbsent(msg.getSenderId(),
+                        id -> userRepository.findById(id).map(u -> u.getName()).orElse("User " + id));
+            }
 
             // MARK THE TRIGGER
             boolean isTrigger = msg.getId().equals(triggerMessage.getId());
@@ -179,8 +189,8 @@ public class AiService {
         return sb.toString();
     }
 
-    private String getSystemPrompt() {
-        return """
+    private String getSystemPrompt(AiMode mode) {
+        String baseInstructions = """
                 You are a wise, knowledgeable, and empathetic third participant in a chat group.
                 Your role is to listen, analyze, and offer perspective or facts when asked.
 
@@ -195,16 +205,36 @@ public class AiService {
                    - If users are speaking Malay (e.g., "Gila siot", "Apa yg jadi"), reply in **Malay**.
                    - If users are speaking English, reply in **English**.
                    - Match the user's slang/register (casual vs formal) appropriately.
+                """;
 
-                3. **DEPTH & FACTS**:
-                   - If the user asks for "facts", "analysis", or "thoughts", provide a COMPREHENSIVE and DETAILED response.
-                   - Do NOT hold back or be overly concise if depth is requested.
-                   - Use objective analysis.
+        String depthInstruction;
+        if (mode == AiMode.DETAILED) {
+            depthInstruction = """
+                    3. **DEPTH & DETAIL (MOMOX MODE)**:
+                       - You are currently invoked as **MOMOX**.
+                       - Provide a **COMPREHENSIVE, IN-DEPTH, AND DETAILED** response.
+                       - Do NOT hold back length. Explain concepts fully, cover multiple angles, and provide extensive examples if relevant.
+                       - Use structured formatting (bullet points, numbered lists) to make long text readable.
+                       - Your goal is MAXIMUM INFORMATION and NUANCE.
+                    """;
+        } else {
+            depthInstruction = """
+                    3. **CONCISENESS (MOMO MODE)**:
+                       - You are currently invoked as **MOMO**.
+                       - Provide a **SHORT, CONCISE, AND PUNCHY** response.
+                       - Get straight to the point. One or two paragraphs maximum.
+                       - Avoid unnecessary fluff or preamble.
+                       - Your goal is CLARITY and BREVITY.
+                    """;
+        }
 
+        String identityInstruction = """
                 4. **IDENTITY (CRITICAL)**:
                    - If asked who you are, who created you, if you are ChatGPT/OpenAI, etc., you MUST reply with this EXACT phrase: "I am MOMO AI."
                    - Do not add explanations, apologies, or extra text.
                 """;
+
+        return baseInstructions + "\n" + depthInstruction + "\n" + identityInstruction;
     }
 
     private AiResponse parseResponse(String jsonBody) {
@@ -229,7 +259,7 @@ public class AiService {
         if ("IMAGE".equalsIgnoreCase(trigger.getMessageType()) &&
                 trigger.getAttachmentUrl() != null &&
                 !trigger.getAttachmentUrl().isEmpty()) {
-            return trigger.getAttachmentUrl();
+            return fileStorageService.generatePresignedUrl(trigger.getAttachmentUrl());
         }
 
         // Case B: User Replied to an image
@@ -241,7 +271,7 @@ public class AiService {
                 if (!Boolean.TRUE.equals(parent.getIsDeleted()) &&
                         "IMAGE".equalsIgnoreCase(parent.getMessageType()) &&
                         parent.getAttachmentUrl() != null) {
-                    return parent.getAttachmentUrl();
+                    return fileStorageService.generatePresignedUrl(parent.getAttachmentUrl());
                 }
             }
         }
@@ -288,8 +318,13 @@ public class AiService {
 
     private void appendMessageToTranscript(StringBuilder sb, Message msg, Map<Long, String> userNames,
             boolean isFocus) {
-        String name = userNames.computeIfAbsent(msg.getSenderId(),
-                id -> userRepository.findById(id).map(u -> u.getName()).orElse("User " + id));
+        String name;
+        if (msg.getMessageType() != null && msg.getMessageType().startsWith("AI_")) {
+            name = "MOMO AI";
+        } else {
+            name = userNames.computeIfAbsent(msg.getSenderId(),
+                    id -> userRepository.findById(id).map(u -> u.getName()).orElse("User " + id));
+        }
         String content = msg.getText();
         if ("IMAGE".equalsIgnoreCase(msg.getMessageType()))
             content = "[Image]";
