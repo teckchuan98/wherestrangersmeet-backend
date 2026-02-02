@@ -16,12 +16,13 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
-    private final com.wherestrangersmeet.backend.service.FileStorageService fileStorageService;
+    private final FileStorageService fileStorageService;
     private final MediaFileService mediaFileService;
-    private final NotificationService notificationService;
+    private final AsyncMessageProcessor asyncMessageProcessor;
     private final org.springframework.messaging.simp.SimpMessagingTemplate simpMessagingTemplate;
+    // Note: NotificationService logic moved to AsyncMessageProcessor
 
-    @Transactional
+    // ORCHESTRATOR: Not Transactional (to avoid long-running DB connections)
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
             Long replyToId, String attachmentHash) {
         return sendMessage(senderId, receiverId, text, messageType, attachmentUrl, replyToId, attachmentHash, true);
@@ -29,6 +30,31 @@ public class MessageService {
 
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
             Long replyToId, String attachmentHash, boolean broadcast) {
+
+        // 1. SYNC: Save to DB (Fast, Ordered)
+        Message savedMessage = saveMessageToDb(senderId, receiverId, text, messageType, attachmentUrl, replyToId,
+                attachmentHash);
+
+        // 2. ASYNC: Fire & Forget delivery (Heavy)
+        asyncMessageProcessor.processInBackground(savedMessage, broadcast);
+
+        // 3. Return immediately (Prescription for UI: Use what we have, URL might be
+        // raw but that's fine for sender if local)
+        // If sender needs presigned URL immediately, we can generate it here quickly OR
+        // rely on their local file path.
+        // For optimisations, we return the saved entity.
+        if (savedMessage.getAttachmentUrl() != null && !savedMessage.getAttachmentUrl().startsWith("http")) {
+            // Quick presign for the sender's response (using cache hopefully)
+            savedMessage.setAttachmentUrl(fileStorageService.generatePresignedUrl(savedMessage.getAttachmentUrl()));
+        }
+
+        return savedMessage;
+    }
+
+    @Transactional
+    public Message saveMessageToDb(Long senderId, Long receiverId, String text, String messageType,
+            String attachmentUrl,
+            Long replyToId, String attachmentHash) {
         final String rawAttachmentUrl = attachmentUrl;
         Message message = Message.builder()
                 .senderId(senderId)
@@ -45,43 +71,6 @@ public class MessageService {
         if (attachmentHash != null && rawAttachmentUrl != null && !rawAttachmentUrl.startsWith("http")) {
             mediaFileService.recordIfAbsent(attachmentHash, rawAttachmentUrl);
         }
-
-        // Presign for immediate display (Critical for real-time WebSocket)
-        if (savedMessage.getAttachmentUrl() != null) {
-            String originalUrl = savedMessage.getAttachmentUrl();
-            String presigned = fileStorageService.generatePresignedUrl(originalUrl);
-            System.out.println("🔄 [MessageService] Presigning URL for msg " + savedMessage.getId() + ": " + originalUrl
-                    + " -> " + presigned);
-            savedMessage.setAttachmentUrl(presigned);
-        }
-
-        // Send Push Notification & WebSocket Update
-        userRepository.findById(receiverId).ifPresent(receiver -> {
-            // WebSocket Push (Fastest)
-            if (broadcast && receiver.getFirebaseUid() != null) {
-                simpMessagingTemplate.convertAndSendToUser(
-                        receiver.getFirebaseUid(),
-                        "/queue/messages",
-                        savedMessage);
-            }
-
-            // Firebase Push Notification (Async, persistent)
-            if (receiver.getFcmToken() != null && !receiver.getFcmToken().isEmpty()) {
-                userRepository.findById(senderId).ifPresent(sender -> {
-                    String title = sender.getName();
-                    String body = "TEXT".equals(messageType) ? text : "Sent a " + messageType.toLowerCase();
-
-                    java.util.Map<String, String> data = new java.util.HashMap<>();
-                    data.put("type", "CHAT");
-                    data.put("senderId", String.valueOf(senderId));
-                    data.put("senderName", sender.getName());
-
-                    notificationService.sendNotification(receiver.getFcmToken(), title, body, data);
-                });
-            }
-        });
-
-        // (Presigned URL already set above)
 
         return savedMessage;
     }
@@ -101,16 +90,12 @@ public class MessageService {
         }
 
         // Parallel presigned URL generation for better performance
+        // Now much faster due to @Cacheable in FileStorageService
         messages.parallelStream().forEach(m -> {
             if (m.getAttachmentUrl() != null) {
                 m.setAttachmentUrl(fileStorageService.generatePresignedUrl(m.getAttachmentUrl()));
             }
         });
-
-        // Backend query is DESC (newest first).
-        // We now return it as-is (DESC) so frontend can use reverse ListView (Newest at
-        // index 0).
-        // Collections.reverse(messages); // REMOVED
 
         return messages;
     }

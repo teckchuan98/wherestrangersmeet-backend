@@ -74,7 +74,7 @@ public class FileStorageService {
         return s3Client.getObject(getObjectRequest);
     }
 
-    // @Cacheable(value = "presignedUrls", key = "#key") // Disabled for debugging
+    @Cacheable(value = "presignedUrls", key = "#key")
     public String generatePresignedUrl(String key) {
         if (key == null) {
             return null;
