@@ -55,7 +55,7 @@ public class AsyncMessageProcessor {
                     data.put("senderId", String.valueOf(message.getSenderId()));
                     data.put("senderName", sender.getName());
 
-                    // Add avatar URL for profile image display
+                    // Add avatar URL with presigned URL generation
                     String avatarUrl = null;
                     if (sender.getPhotos() != null && !sender.getPhotos().isEmpty()) {
                         avatarUrl = sender.getPhotos().get(0).getUrl();
@@ -63,6 +63,10 @@ public class AsyncMessageProcessor {
                         avatarUrl = sender.getAvatarUrl();
                     }
                     if (avatarUrl != null) {
+                        // Generate presigned URL if it's a relative path
+                        if (!avatarUrl.startsWith("http")) {
+                            avatarUrl = fileStorageService.generatePresignedUrl(avatarUrl);
+                        }
                         data.put("senderAvatar", avatarUrl);
                     }
 
