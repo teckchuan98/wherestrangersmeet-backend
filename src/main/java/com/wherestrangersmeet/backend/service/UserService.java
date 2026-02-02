@@ -175,7 +175,7 @@ public class UserService {
     public void updateUserStatus(Long userId, boolean isOnline) {
         userRepository.findById(userId).ifPresent(user -> {
             user.setIsOnline(isOnline);
-            user.setLastActive(LocalDateTime.now());
+            user.setLastActive(LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")));
             userRepository.save(user);
 
             // Broadcast presence update to ALL users via WebSocket
