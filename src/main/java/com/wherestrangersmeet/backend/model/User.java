@@ -1,5 +1,6 @@
 package com.wherestrangersmeet.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonGetter;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -8,6 +9,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -98,4 +100,17 @@ public class User {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    /**
+     * Custom JSON serialization for lastActive.
+     * Returns epoch milliseconds (UTC) instead of LocalDateTime string.
+     * This prevents timezone issues on the client side.
+     */
+    @JsonGetter("lastActive")
+    public Long getLastActiveMillis() {
+        if (lastActive == null) {
+            return null;
+        }
+        return lastActive.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
 }

@@ -131,4 +131,38 @@ public class FileStorageService {
         // Return the key directly; the Controller will convert it to a Presigned URL
         return key;
     }
+
+    public void deleteObject(String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+
+        String cleanKey = key;
+        if (key.startsWith("http")) {
+            if (key.contains("message-media/")) {
+                cleanKey = key.substring(key.indexOf("message-media/"));
+                if (cleanKey.contains("?")) {
+                    cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
+                }
+            } else if (key.contains("user-photos/")) {
+                cleanKey = key.substring(key.indexOf("user-photos/"));
+                if (cleanKey.contains("?")) {
+                    cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
+                }
+            } else {
+                return;
+            }
+        }
+
+        try {
+            software.amazon.awssdk.services.s3.model.DeleteObjectRequest deleteRequest = software.amazon.awssdk.services.s3.model.DeleteObjectRequest
+                    .builder()
+                    .bucket(bucketName)
+                    .key(cleanKey)
+                    .build();
+            s3Client.deleteObject(deleteRequest);
+        } catch (Exception e) {
+            System.err.println("❌ Error deleting object [" + cleanKey + "]: " + e.getMessage());
+        }
+    }
 }

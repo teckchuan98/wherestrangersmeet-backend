@@ -49,5 +49,11 @@ public class Message {
     @Column(name = "reply_to_id")
     private Long replyToId;
 
+    @Column(name = "selfie_request_id")
+    private Long selfieRequestId;
+
+    @Column(name = "selfie_expires_at")
+    private LocalDateTime selfieExpiresAt;
+
     // Ignoring order_id as it seems unrelated to direct messaging or is nullable
 }
