@@ -55,6 +55,17 @@ public class AsyncMessageProcessor {
                     data.put("senderId", String.valueOf(message.getSenderId()));
                     data.put("senderName", sender.getName());
 
+                    // Add avatar URL for profile image display
+                    String avatarUrl = null;
+                    if (sender.getPhotos() != null && !sender.getPhotos().isEmpty()) {
+                        avatarUrl = sender.getPhotos().get(0).getUrl();
+                    } else if (sender.getAvatarUrl() != null) {
+                        avatarUrl = sender.getAvatarUrl();
+                    }
+                    if (avatarUrl != null) {
+                        data.put("senderAvatar", avatarUrl);
+                    }
+
                     notificationService.sendNotification(receiver.getFcmToken(), title, body, data);
                 });
             }
