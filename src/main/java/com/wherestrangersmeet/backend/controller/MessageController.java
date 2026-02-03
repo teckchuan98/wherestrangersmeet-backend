@@ -6,6 +6,8 @@ import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.service.MessageService;
 import com.wherestrangersmeet.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -23,6 +25,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MessageController {
 
+    private static final Logger log = LoggerFactory.getLogger(MessageController.class);
     private final MessageService messageService;
     private final UserService userService;
     private final com.wherestrangersmeet.backend.service.UserCache userCache;
@@ -65,7 +68,7 @@ public class MessageController {
     @MessageMapping("/chat.sendMessage")
     public void handleWebSocketMessage(Map<String, Object> payload, Principal principal) {
         if (principal == null) {
-            System.err.println("❌ WebSocket message received without authentication");
+            log.warn("❌ WebSocket message received without authentication");
             return;
         }
 
@@ -75,7 +78,7 @@ public class MessageController {
             Long receiverId = ((Number) payload.get("receiverId")).longValue();
 
             if (senderId.equals(receiverId)) {
-                System.err.println("❌ Cannot send message to yourself");
+                log.warn("❌ Cannot send message to yourself");
                 return;
             }
 
@@ -106,11 +109,10 @@ public class MessageController {
                     "/queue/messages",
                     savedMessage);
 
-            System.out.println("✅ WebSocket message sent successfully: " + savedMessage.getId());
+            log.info("✅ WebSocket message sent successfully: {}", savedMessage.getId());
 
         } catch (Exception e) {
-            System.err.println("❌ Error handling WebSocket message: " + e.getMessage());
-            e.printStackTrace();
+            log.error("❌ Error handling WebSocket message", e);
         }
     }
 
@@ -141,7 +143,7 @@ public class MessageController {
             });
 
         } catch (Exception e) {
-            System.err.println("❌ Error handling typing status: " + e.getMessage());
+            log.error("❌ Error handling typing status", e);
         }
     }
 

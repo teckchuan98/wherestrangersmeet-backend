@@ -3,6 +3,8 @@ package com.wherestrangersmeet.backend.service;
 import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -13,6 +15,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class UserCache {
 
+    private static final Logger log = LoggerFactory.getLogger(UserCache.class);
     private final UserRepository userRepository;
 
     /**
@@ -77,6 +80,6 @@ public class UserCache {
     @CacheEvict(value = {"userIdCache", "firebaseUidCache", "userCache", "userByFirebaseUidCache"},
                 allEntries = true)
     public void clearAllCaches() {
-        System.out.println("🗑️ All user caches cleared");
+        log.info("🗑️ All user caches cleared");
     }
 }

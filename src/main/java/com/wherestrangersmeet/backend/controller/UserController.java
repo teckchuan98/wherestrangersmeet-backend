@@ -5,6 +5,8 @@ import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.service.FileStorageService;
 import com.wherestrangersmeet.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,6 +21,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserController {
 
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
     private final UserService userService;
     private final FileStorageService fileStorageService;
 
@@ -130,7 +133,7 @@ public class UserController {
         // System.out.println("Request body: " + request);
 
         if (principal == null) {
-            System.err.println("ERROR: FirebaseToken principal is NULL - authentication failed!");
+            log.error("ERROR: FirebaseToken principal is NULL - authentication failed!");
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Authentication failed - no valid Firebase token"));
         }
@@ -139,7 +142,7 @@ public class UserController {
 
         User user = userService.getUserByFirebaseUid(principal.getUid())
                 .orElseThrow(() -> {
-                    System.err.println("ERROR: User not found in database for UID: " + principal.getUid());
+                    log.error("ERROR: User not found in database for UID: {}", principal.getUid());
                     return new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
                 });
 
@@ -161,7 +164,7 @@ public class UserController {
             try {
                 gender = User.Gender.valueOf(genderStr.toUpperCase());
             } catch (IllegalArgumentException e) {
-                System.err.println("Invalid gender value: " + genderStr);
+                log.warn("Invalid gender value: {}", genderStr);
             }
         }
 
@@ -170,7 +173,7 @@ public class UserController {
             try {
                 occupationStatus = User.OccupationStatus.valueOf(occupationStatusStr.toUpperCase());
             } catch (IllegalArgumentException e) {
-                System.err.println("Invalid occupation status value: " + occupationStatusStr);
+                log.warn("Invalid occupation status value: {}", occupationStatusStr);
             }
         }
 
@@ -274,7 +277,7 @@ public class UserController {
             @AuthenticationPrincipal FirebaseToken principal,
             @RequestBody Map<String, List<String>> request) {
 
-        System.out.println("========== UPDATE INTERESTS ==========");
+        log.info("========== UPDATE INTERESTS ==========");
         if (principal == null)
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
 
@@ -308,15 +311,15 @@ public class UserController {
             String timestamp = java.time.LocalDateTime.now()
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
 
-            System.out.println("┌─────────────────────────────────────────────────────");
-            System.out.println("│ 🌐 HTTP STATUS UPDATE");
-            System.out.println("│ Time: " + timestamp);
-            System.out.println("│ Endpoint: PUT /api/users/status");
-            System.out.println("│ User ID: " + user.getId());
-            System.out.println("│ Name: " + user.getName());
-            System.out.println("│ Request: isOnline=" + isOnline);
-            System.out.println("│ Source: HTTP Heartbeat (Frontend)");
-            System.out.println("└─────────────────────────────────────────────────────");
+            log.info("┌─────────────────────────────────────────────────────");
+            log.info("│ 🌐 HTTP STATUS UPDATE");
+            log.info("│ Time: {}", timestamp);
+            log.info("│ Endpoint: PUT /api/users/status");
+            log.info("│ User ID: {}", user.getId());
+            log.info("│ Name: {}", user.getName());
+            log.info("│ Request: isOnline={}", isOnline);
+            log.info("│ Source: HTTP Heartbeat (Frontend)");
+            log.info("└─────────────────────────────────────────────────────");
 
             userService.updateUserStatus(user.getId(), isOnline, "HTTP-Heartbeat");
         }
@@ -330,7 +333,7 @@ public class UserController {
      */
     @DeleteMapping("/me")
     public ResponseEntity<?> deleteAccount(@AuthenticationPrincipal FirebaseToken principal) {
-        System.out.println("========== DELETE ACCOUNT ==========");
+        log.info("========== DELETE ACCOUNT ==========");
         if (principal == null)
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
 

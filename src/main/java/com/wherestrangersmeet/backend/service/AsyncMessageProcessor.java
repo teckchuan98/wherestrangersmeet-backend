@@ -3,6 +3,8 @@ package com.wherestrangersmeet.backend.service;
 import com.wherestrangersmeet.backend.model.Message;
 import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AsyncMessageProcessor {
 
+    private static final Logger log = LoggerFactory.getLogger(AsyncMessageProcessor.class);
     private final SimpMessagingTemplate simpMessagingTemplate;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
@@ -162,8 +165,7 @@ public class AsyncMessageProcessor {
             });
 
         } catch (Exception e) {
-            System.err.println("Error processing AI trigger: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Error processing AI trigger", e);
         }
     }
 }

@@ -2,6 +2,8 @@ package com.wherestrangersmeet.backend.controller;
 
 import com.wherestrangersmeet.backend.service.OpenAIService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequestMapping("/api/verification")
 public class VerificationController {
 
+    private static final Logger log = LoggerFactory.getLogger(VerificationController.class);
+
     @Autowired
     private OpenAIService openAIService;
 
@@ -30,27 +34,29 @@ public class VerificationController {
             @RequestParam("photo2") MultipartFile photo2,
             HttpServletRequest request) {
 
-        System.out.println(">>> Verification Controller HIT!");
+        log.info("Verification request received from IP: {}", request.getRemoteAddr());
         String clientIp = request.getRemoteAddr();
 
         if (isRateLimited(clientIp)) {
+            log.warn("Rate limit exceeded for IP: {}", clientIp);
             return ResponseEntity.status(429)
                     .body(Map.of("message", "Too many verification attempts (" + MAX_REQUESTS_PER_HOUR
                             + "/hour). Please try again later."));
         }
 
         try {
-            System.out.println("Calling OpenAIService...");
+            log.debug("Calling OpenAIService for photo verification");
             Map<String, Object> result = openAIService.verifyPhotos(photo1, photo2);
-            System.out.println("OpenAIService returned: " + (result != null ? result.toString() : "NULL"));
+            log.debug("OpenAIService returned result: {}", result);
 
             if (result == null) {
+                log.error("OpenAI Service returned null");
                 return ResponseEntity.internalServerError()
                         .body(Map.of("message", "Internal Error: OpenAI Service returned null"));
             }
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Verification failed: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "Verification failed: " + e.getMessage()));
         }

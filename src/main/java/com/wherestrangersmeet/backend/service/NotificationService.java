@@ -2,6 +2,8 @@ package com.wherestrangersmeet.backend.service;
 
 import com.google.firebase.messaging.*;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -12,10 +14,12 @@ import org.springframework.scheduling.annotation.Async;
 @RequiredArgsConstructor
 public class NotificationService {
 
+        private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
+
         @Async
         public void sendNotification(String token, String title, String body, Map<String, String> data) {
                 if (token == null || token.isEmpty()) {
-                        System.out.println("⚠️ Notification skipped: Token is null or empty");
+                        log.warn("⚠️ Notification skipped: Token is null or empty");
                         return;
                 }
 
@@ -23,11 +27,11 @@ public class NotificationService {
                 String maskedToken = token.length() > 10
                                 ? token.substring(0, 5) + "..." + token.substring(token.length() - 5)
                                 : "SHORT_TOKEN";
-                System.out.println("\n🚀 PREPARING TO SEND NOTIFICATION 🚀");
-                System.out.println("Target Token: " + maskedToken);
-                System.out.println("Title: " + title);
-                System.out.println("Body: " + body);
-                System.out.println("Data: " + data);
+                log.info("🚀 PREPARING TO SEND NOTIFICATION 🚀");
+                log.info("Target Token: {}", maskedToken);
+                log.info("Title: {}", title);
+                log.info("Body: {}", body);
+                log.info("Data: {}", data);
 
                 try {
                         // Android Config
@@ -70,15 +74,13 @@ public class NotificationService {
                         }
 
                         Message message = messageBuilder.build();
-                        System.out.println("Sending to Firebase...");
+                        log.info("Sending to Firebase...");
 
                         String response = FirebaseMessaging.getInstance().send(message);
-                        System.out.println("✅ FIREBASE RESPONSE: " + response);
-                        System.out.println("Notification sent successfully.\n");
+                        log.info("✅ FIREBASE RESPONSE: {}", response);
+                        log.info("Notification sent successfully.");
                 } catch (Exception e) {
-                        System.err.println("❌ FAILED TO SEND NOTIFICATION ❌");
-                        System.err.println("Error: " + e.getMessage());
-                        e.printStackTrace(); // Print full stack trace for debugging
+                        log.error("❌ FAILED TO SEND NOTIFICATION ❌", e);
                 }
         }
 }

@@ -3,6 +3,8 @@ package com.wherestrangersmeet.backend.config;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseToken;
 import com.wherestrangersmeet.backend.service.UserService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -22,6 +24,7 @@ import java.util.List;
 @Component
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
+    private static final Logger log = LoggerFactory.getLogger(WebSocketAuthInterceptor.class);
     private final UserService userService;
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
@@ -52,28 +55,28 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
                     // Mark user as ONLINE when WebSocket connects
                     userService.getUserByFirebaseUid(decodedToken.getUid()).ifPresent(user -> {
-                        System.out.println("┌─────────────────────────────────────────────────────");
-                        System.out.println("│ 🔌 WEBSOCKET CONNECT");
-                        System.out.println("│ Time: " + timestamp);
-                        System.out.println("│ User ID: " + user.getId());
-                        System.out.println("│ Firebase UID: " + decodedToken.getUid());
-                        System.out.println("│ Name: " + user.getName());
-                        System.out.println("│ Session: " + accessor.getSessionId());
-                        System.out.println("│ Source: WebSocket CONNECT frame");
+                        log.info("┌─────────────────────────────────────────────────────");
+                        log.info("│ 🔌 WEBSOCKET CONNECT");
+                        log.info("│ Time: {}", timestamp);
+                        log.info("│ User ID: {}", user.getId());
+                        log.info("│ Firebase UID: {}", decodedToken.getUid());
+                        log.info("│ Name: {}", user.getName());
+                        log.info("│ Session: {}", accessor.getSessionId());
+                        log.info("│ Source: WebSocket CONNECT frame");
 
                         userService.updateUserStatus(user.getId(), true, "WebSocket-CONNECT");
 
-                        System.out.println("│ Status: ✅ User marked ONLINE");
-                        System.out.println("└─────────────────────────────────────────────────────");
+                        log.info("│ Status: ✅ User marked ONLINE");
+                        log.info("└─────────────────────────────────────────────────────");
                     });
 
                 } catch (Exception e) {
-                    System.out.println("┌─────────────────────────────────────────────────────");
-                    System.out.println("│ ❌ WEBSOCKET AUTH FAILED");
-                    System.out.println("│ Time: " + timestamp);
-                    System.out.println("│ Error: " + e.getMessage());
-                    System.out.println("│ Session: " + accessor.getSessionId());
-                    System.out.println("└─────────────────────────────────────────────────────");
+                    log.warn("┌─────────────────────────────────────────────────────");
+                    log.warn("│ ❌ WEBSOCKET AUTH FAILED");
+                    log.warn("│ Time: {}", timestamp);
+                    log.warn("│ Error: {}", e.getMessage());
+                    log.warn("│ Session: {}", accessor.getSessionId());
+                    log.warn("└─────────────────────────────────────────────────────");
                 }
             }
         } else if (StompCommand.DISCONNECT.equals(accessor.getCommand())) {
@@ -81,19 +84,19 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             if (accessor.getUser() != null) {
                 String firebaseUid = accessor.getUser().getName();
                 userService.getUserByFirebaseUid(firebaseUid).ifPresent(user -> {
-                    System.out.println("┌─────────────────────────────────────────────────────");
-                    System.out.println("│ 🔌 WEBSOCKET DISCONNECT");
-                    System.out.println("│ Time: " + timestamp);
-                    System.out.println("│ User ID: " + user.getId());
-                    System.out.println("│ Firebase UID: " + firebaseUid);
-                    System.out.println("│ Name: " + user.getName());
-                    System.out.println("│ Session: " + accessor.getSessionId());
-                    System.out.println("│ Source: WebSocket DISCONNECT frame");
+                    log.info("┌─────────────────────────────────────────────────────");
+                    log.info("│ 🔌 WEBSOCKET DISCONNECT");
+                    log.info("│ Time: {}", timestamp);
+                    log.info("│ User ID: {}", user.getId());
+                    log.info("│ Firebase UID: {}", firebaseUid);
+                    log.info("│ Name: {}", user.getName());
+                    log.info("│ Session: {}", accessor.getSessionId());
+                    log.info("│ Source: WebSocket DISCONNECT frame");
 
                     userService.updateUserStatus(user.getId(), false, "WebSocket-DISCONNECT");
 
-                    System.out.println("│ Status: 🔴 User marked OFFLINE");
-                    System.out.println("└─────────────────────────────────────────────────────");
+                    log.info("│ Status: 🔴 User marked OFFLINE");
+                    log.info("└─────────────────────────────────────────────────────");
                 });
             }
         }

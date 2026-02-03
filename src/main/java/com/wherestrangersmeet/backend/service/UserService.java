@@ -5,6 +5,8 @@ import com.wherestrangersmeet.backend.model.UserPhoto;
 import com.wherestrangersmeet.backend.repository.UserPhotoRepository;
 import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 @RequiredArgsConstructor
 public class UserService {
 
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
     private final UserRepository userRepository;
     private final UserPhotoRepository userPhotoRepository;
     private final FileStorageService fileStorageService;
@@ -49,14 +52,14 @@ public class UserService {
         // First check by Firebase UID
         Optional<User> existing = userRepository.findByFirebaseUid(firebaseUid);
         if (existing.isPresent()) {
-            System.out.println("User already exists with UID: " + firebaseUid);
+            log.info("User already exists with UID: {}", firebaseUid);
             return existing.get();
         }
 
         // Check by email to link accounts
         Optional<User> existingByEmail = userRepository.findByEmail(email);
         if (existingByEmail.isPresent()) {
-            System.out.println("User exists with email, linking Firebase UID: " + firebaseUid);
+            log.info("User exists with email, linking Firebase UID: {}", firebaseUid);
             User user = existingByEmail.get();
             user.setFirebaseUid(firebaseUid);
             if (avatarUrl != null)
@@ -71,12 +74,12 @@ public class UserService {
             user.setEmail(email);
             user.setName(name != null ? name : email.split("@")[0]);
             user.setAvatarUrl(avatarUrl);
-            System.out.println("Creating new user: " + email);
+            log.info("Creating new user: {}", email);
             return userRepository.save(user);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // Race condition: another thread just created this user
             // Retry the lookup
-            System.out.println("Duplicate key detected, retrying lookup for: " + firebaseUid);
+            log.warn("Duplicate key detected, retrying lookup for: {}", firebaseUid);
 
             existing = userRepository.findByFirebaseUid(firebaseUid);
             if (existing.isPresent()) {
@@ -159,15 +162,15 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        System.out.println("🗑️ Soft deleting user: " + user.getId() + " (" + user.getEmail() + ")");
+        log.info("🗑️ Soft deleting user: {} ({})", user.getId(), user.getEmail());
 
         // Delete from Firebase Auth first
         if (user.getFirebaseUid() != null) {
             try {
                 com.google.firebase.auth.FirebaseAuth.getInstance().deleteUser(user.getFirebaseUid());
-                System.out.println("✅ Deleted user from Firebase: " + user.getFirebaseUid());
+                log.info("✅ Deleted user from Firebase: {}", user.getFirebaseUid());
             } catch (com.google.firebase.auth.FirebaseAuthException e) {
-                System.err.println("⚠️ Failed to delete user from Firebase: " + e.getMessage());
+                log.warn("⚠️ Failed to delete user from Firebase: {}", e.getMessage());
                 // Continue with soft delete even if Firebase fails
             }
         }
@@ -197,7 +200,7 @@ public class UserService {
         user.getPhotos().clear();
 
         userRepository.save(user);
-        System.out.println("✅ User soft deleted and anonymized successfully");
+        log.info("✅ User soft deleted and anonymized successfully");
     }
 
     @Transactional
@@ -207,24 +210,24 @@ public class UserService {
             String timestamp = LocalDateTime.now().format(formatter);
 
             // Log BEFORE update to see previous state
-            System.out.println("┌─────────────────────────────────────────────────────");
-            System.out.println("│ 📊 PRESENCE UPDATE REQUEST");
-            System.out.println("│ Time: " + timestamp);
-            System.out.println("│ User ID: " + userId);
-            System.out.println("│ Name: " + user.getName());
-            System.out.println("│ Current State: " + (user.getIsOnline() ? "ONLINE" : "OFFLINE"));
-            System.out.println("│ Current lastActive: " + user.getLastActive());
-            System.out.println("│ New State: " + (isOnline ? "ONLINE" : "OFFLINE"));
-            System.out.println("│ Source: " + source);
+            log.info("┌─────────────────────────────────────────────────────");
+            log.info("│ 📊 PRESENCE UPDATE REQUEST");
+            log.info("│ Time: {}", timestamp);
+            log.info("│ User ID: {}", userId);
+            log.info("│ Name: {}", user.getName());
+            log.info("│ Current State: {}", user.getIsOnline() ? "ONLINE" : "OFFLINE");
+            log.info("│ Current lastActive: {}", user.getLastActive());
+            log.info("│ New State: {}", isOnline ? "ONLINE" : "OFFLINE");
+            log.info("│ Source: {}", source);
 
             user.setIsOnline(isOnline);
 
             // Only update lastActive when marking ONLINE (preserves actual last activity time)
             if (isOnline) {
                 user.setLastActive(LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")));
-                System.out.println("│ Updated lastActive: " + user.getLastActive());
+                log.info("│ Updated lastActive: {}", user.getLastActive());
             } else {
-                System.out.println("│ Preserved lastActive: " + user.getLastActive());
+                log.info("│ Preserved lastActive: {}", user.getLastActive());
             }
 
             userRepository.save(user);
@@ -237,8 +240,8 @@ public class UserService {
 
             messagingTemplate.convertAndSend("/topic/presence", presenceUpdate);
 
-            System.out.println("│ Broadcast: ✅ Sent to /topic/presence");
-            System.out.println("└─────────────────────────────────────────────────────");
+            log.info("│ Broadcast: ✅ Sent to /topic/presence");
+            log.info("└─────────────────────────────────────────────────────");
         });
     }
 

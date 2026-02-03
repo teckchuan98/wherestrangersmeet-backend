@@ -1,6 +1,8 @@
 package com.wherestrangersmeet.backend.service;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class FileStorageService {
 
+    private static final Logger log = LoggerFactory.getLogger(FileStorageService.class);
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
 
@@ -90,13 +93,13 @@ public class FileStorageService {
                 if (cleanKey.contains("?")) {
                     cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
                 }
-                System.out.println("♻️ Recovered key from URL: " + cleanKey);
+                log.info("♻️ Recovered key from URL: {}", cleanKey);
             } else if (key.contains("user-photos/")) {
                 cleanKey = key.substring(key.indexOf("user-photos/"));
                 if (cleanKey.contains("?")) {
                     cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
                 }
-                System.out.println("♻️ Recovered key from URL: " + cleanKey);
+                log.info("♻️ Recovered key from URL: {}", cleanKey);
             } else {
                 // Genuine external URL (e.g. Google Auth)
                 return key;
@@ -117,12 +120,11 @@ public class FileStorageService {
                     .build();
 
             String presignedUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
-            System.out.println("✅ Generated presigned URL for key [" + cleanKey + "]: " + presignedUrl);
+            log.info("✅ Generated presigned URL for key [{}]: {}", cleanKey, presignedUrl);
             return presignedUrl;
 
         } catch (Exception e) {
-            System.err.println("❌ Error generating presigned URL for key [" + cleanKey + "]: " + e.getMessage());
-            e.printStackTrace();
+            log.error("❌ Error generating presigned URL for key [{}]", cleanKey, e);
             return key; // Fallback to key
         }
     }

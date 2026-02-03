@@ -2,6 +2,8 @@ package com.wherestrangersmeet.backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,8 @@ import java.util.*;
 @Service
 public class OpenAIService {
 
+    private static final Logger log = LoggerFactory.getLogger(OpenAIService.class);
+
     @Value("${openai.api.key}")
     private String apiKey;
 
@@ -21,16 +25,98 @@ public class OpenAIService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public Map<String, Object> verifyPhotos(MultipartFile photo1, MultipartFile photo2) throws IOException {
-        System.out.println(">>> OpenAIService.verifyPhotos called.");
+        log.info("OpenAIService.verifyPhotos called.");
         if (apiKey == null || apiKey.isEmpty()) {
-            System.err.println("!!! ERROR: OpenAI API Key is missing or empty!");
+            log.error("ERROR: OpenAI API Key is missing or empty!");
             throw new RuntimeException("OpenAI API Key is not configured.");
         } else {
-            System.out.println(">>> OpenAI API Key present (length: " + apiKey.length() + ")");
+            log.info("OpenAI API Key present (length: " + apiKey.length() + ")");
         }
+
+        // Check image sizes
+        long size1 = photo1.getSize();
+        long size2 = photo2.getSize();
+        log.info("Image sizes: photo1=" + size1 + " bytes, photo2=" + size2 + " bytes");
+
+        // OpenAI limit is 20MB for vision API, but base64 adds ~33% overhead
+        // So limit original images to 10MB to be safe
+        final long MAX_SIZE = 10 * 1024 * 1024; // 10MB
+        if (size1 > MAX_SIZE || size2 > MAX_SIZE) {
+            log.error("ERROR: Image too large. photo1=" + size1 + ", photo2=" + size2);
+            Map<String, Object> error = new HashMap<>();
+            error.put("valid", false);
+            error.put("message", "Images too large. Please use photos under 10MB.");
+            return error;
+        }
+
+        // Retry up to 3 times
+        final int MAX_RETRIES = 3;
+        Map<String, Object> lastError = null;
+
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            log.info("Attempt " + attempt + " of " + MAX_RETRIES);
+
+            try {
+                Map<String, Object> result = verifyPhotosInternal(photo1, photo2);
+
+                // If successful, return immediately
+                if (result != null && Boolean.TRUE.equals(result.get("valid"))) {
+                    log.info("Verification successful on attempt {}", attempt);
+                    return result;
+                }
+
+                // If validation failed (not a technical error), return immediately
+                // Example: "faces not visible" or "not same person"
+                if (result != null && result.containsKey("facesVisible")) {
+                    log.info("Verification completed on attempt {} (validation result: {})", attempt, result.get("valid"));
+                    return result;
+                }
+
+                // Technical error - store and retry
+                lastError = result;
+                log.warn("Technical error on attempt {}, will retry", attempt);
+
+            } catch (Exception e) {
+                log.warn("Exception on attempt {}: {}", attempt, e.getMessage());
+                lastError = new HashMap<>();
+                lastError.put("valid", false);
+                lastError.put("message", e.getMessage());
+            }
+
+            // Wait before retrying (exponential backoff: 1s, 2s, 4s)
+            if (attempt < MAX_RETRIES) {
+                try {
+                    long waitTime = (long) Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+                    log.info("Waiting {}ms before retry", waitTime);
+                    Thread.sleep(waitTime);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        // All retries failed - return user-friendly error
+        log.error("All {} attempts failed for photo verification", MAX_RETRIES);
+        Map<String, Object> userFriendlyError = new HashMap<>();
+        userFriendlyError.put("valid", false);
+        userFriendlyError.put("message", "We're having trouble verifying your photos. Please ensure your face is clearly visible and avoid sensitive content. Try retaking the photos or try again later.");
+        return userFriendlyError;
+    }
+
+    /**
+     * Internal method that performs the actual verification (called by retry logic)
+     */
+    private Map<String, Object> verifyPhotosInternal(MultipartFile photo1, MultipartFile photo2) throws IOException {
 
         String base64Image1 = Base64.getEncoder().encodeToString(photo1.getBytes());
         String base64Image2 = Base64.getEncoder().encodeToString(photo2.getBytes());
+
+        log.info("Base64 lengths: photo1=" + base64Image1.length() + ", photo2=" + base64Image2.length());
+
+        // Detect MIME types
+        String mimeType1 = photo1.getContentType() != null ? photo1.getContentType() : "image/jpeg";
+        String mimeType2 = photo2.getContentType() != null ? photo2.getContentType() : "image/jpeg";
+        log.info("MIME types: photo1=" + mimeType1 + ", photo2=" + mimeType2);
 
         String url = "https://api.openai.com/v1/chat/completions";
 
@@ -58,7 +144,7 @@ public class OpenAIService {
         Map<String, Object> image1Content = new HashMap<>();
         image1Content.put("type", "image_url");
         Map<String, String> imageUrl1 = new HashMap<>();
-        imageUrl1.put("url", "data:image/jpeg;base64," + base64Image1);
+        imageUrl1.put("url", "data:" + mimeType1 + ";base64," + base64Image1);
         image1Content.put("image_url", imageUrl1);
         content.add(image1Content);
 
@@ -66,7 +152,7 @@ public class OpenAIService {
         Map<String, Object> image2Content = new HashMap<>();
         image2Content.put("type", "image_url");
         Map<String, String> imageUrl2 = new HashMap<>();
-        imageUrl2.put("url", "data:image/jpeg;base64," + base64Image2);
+        imageUrl2.put("url", "data:" + mimeType2 + ";base64," + base64Image2);
         image2Content.put("image_url", imageUrl2);
         content.add(image2Content);
 
@@ -83,18 +169,48 @@ public class OpenAIService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
 
         try {
-            System.out.println("Sending request to OpenAI...");
+            log.info("Sending request to OpenAI...");
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
-            System.out.println("OpenAI Status: " + response.getStatusCode());
-            System.out.println("OpenAI Body: " + response.getBody());
+            log.info("OpenAI Status: " + response.getStatusCode());
+            log.info("OpenAI Response Body: " + response.getBody());
 
             JsonNode root = objectMapper.readTree(response.getBody());
-            String contentString = root.path("choices").get(0).path("message").path("content").asText();
-            System.out.println("OpenAI Parsed Content: " + contentString);
 
-            return objectMapper.readValue(contentString, Map.class);
+            // Check if choices array exists and has elements
+            if (!root.has("choices") || root.path("choices").size() == 0) {
+                log.error("OpenAI response has no choices!");
+                Map<String, Object> error = new HashMap<>();
+                error.put("valid", false);
+                error.put("message", "OpenAI returned empty response");
+                return error;
+            }
+
+            String contentString = root.path("choices").get(0).path("message").path("content").asText();
+            log.info("OpenAI Raw Content: " + contentString);
+
+            // Extract JSON from response (handles markdown code blocks and extra text)
+            String jsonString = extractJson(contentString);
+            log.info("Extracted JSON: " + jsonString);
+
+            return objectMapper.readValue(jsonString, Map.class);
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // HTTP 4xx errors (bad request, unauthorized, rate limit, etc.)
+            log.error("OpenAI HTTP Client Error: " + e.getStatusCode());
+            log.error("Response Body: " + e.getResponseBodyAsString());
+            Map<String, Object> error = new HashMap<>();
+            error.put("valid", false);
+            error.put("message", "OpenAI API Error (" + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+            return error;
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            // HTTP 5xx errors (OpenAI server error)
+            log.error("OpenAI HTTP Server Error: " + e.getStatusCode());
+            log.error("Response Body: " + e.getResponseBodyAsString());
+            Map<String, Object> error = new HashMap<>();
+            error.put("valid", false);
+            error.put("message", "OpenAI service is temporarily unavailable. Please try again.");
+            return error;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Unexpected error during photo verification: {}", e.getMessage(), e);
             Map<String, Object> error = new HashMap<>();
             error.put("valid", false);
             error.put("message", "Error verifying photos: " + e.getMessage());
@@ -103,7 +219,7 @@ public class OpenAIService {
     }
 
     public Map<String, Object> verifyPhotoUrl(String newPhotoUrl, List<String> referencePhotoUrls) {
-        System.out.println(">>> OpenAIService.verifyPhotoUrl called.");
+        log.info("OpenAIService.verifyPhotoUrl called.");
         if (apiKey == null || apiKey.isEmpty()) {
             throw new RuntimeException("OpenAI API Key is not configured.");
         }
@@ -170,20 +286,93 @@ public class OpenAIService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
 
         try {
-            System.out.println("Sending verification request to OpenAI...");
+            log.info("Sending verification request to OpenAI...");
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            log.info("OpenAI Status: " + response.getStatusCode());
 
             JsonNode root = objectMapper.readTree(response.getBody());
-            String contentString = root.path("choices").get(0).path("message").path("content").asText();
-            System.out.println("OpenAI Verification Result: " + contentString);
 
-            return objectMapper.readValue(contentString, Map.class);
+            // Check if choices array exists and has elements
+            if (!root.has("choices") || root.path("choices").size() == 0) {
+                log.error("OpenAI response has no choices!");
+                Map<String, Object> error = new HashMap<>();
+                error.put("valid", false);
+                error.put("message", "OpenAI returned empty response");
+                return error;
+            }
+
+            String contentString = root.path("choices").get(0).path("message").path("content").asText();
+            log.info("OpenAI Raw Content: " + contentString);
+
+            // Extract JSON from response (handles markdown code blocks and extra text)
+            String jsonString = extractJson(contentString);
+            log.info("Extracted JSON: " + jsonString);
+
+            return objectMapper.readValue(jsonString, Map.class);
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("OpenAI HTTP Client Error: " + e.getStatusCode());
+            log.error("Response Body: " + e.getResponseBodyAsString());
+            Map<String, Object> error = new HashMap<>();
+            error.put("valid", false);
+            error.put("message", "OpenAI API Error (" + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+            return error;
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            log.error("OpenAI HTTP Server Error: " + e.getStatusCode());
+            log.error("Response Body: " + e.getResponseBodyAsString());
+            Map<String, Object> error = new HashMap<>();
+            error.put("valid", false);
+            error.put("message", "OpenAI service is temporarily unavailable. Please try again.");
+            return error;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Unexpected error during photo URL verification: {}", e.getMessage(), e);
             Map<String, Object> error = new HashMap<>();
             error.put("valid", false);
             error.put("message", "Error calling AI service: " + e.getMessage());
             return error;
         }
+    }
+
+    /**
+     * Extracts JSON from OpenAI response that may contain markdown code blocks or extra text.
+     * Handles cases like:
+     * - Plain JSON: {"valid": true, ...}
+     * - Markdown: ```json\n{"valid": true, ...}\n```
+     * - With text: Here's the result: {"valid": true, ...}
+     */
+    private String extractJson(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return "{}";
+        }
+
+        String trimmed = content.trim();
+
+        // Case 1: Markdown code block with ```json ... ```
+        if (trimmed.contains("```json")) {
+            int startIndex = trimmed.indexOf("```json") + 7; // Length of "```json"
+            int endIndex = trimmed.indexOf("```", startIndex);
+            if (endIndex > startIndex) {
+                return trimmed.substring(startIndex, endIndex).trim();
+            }
+        }
+
+        // Case 2: Markdown code block with ``` ... ``` (no language specified)
+        if (trimmed.startsWith("```") && trimmed.endsWith("```")) {
+            String extracted = trimmed.substring(3, trimmed.length() - 3).trim();
+            // Remove language identifier if present (e.g., ```json)
+            if (extracted.startsWith("json")) {
+                extracted = extracted.substring(4).trim();
+            }
+            return extracted;
+        }
+
+        // Case 3: Find JSON object by looking for { ... }
+        int jsonStart = trimmed.indexOf('{');
+        int jsonEnd = trimmed.lastIndexOf('}');
+        if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
+            return trimmed.substring(jsonStart, jsonEnd + 1);
+        }
+
+        // Case 4: Return as-is (might be plain JSON)
+        return trimmed;
     }
 }

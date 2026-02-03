@@ -3,6 +3,8 @@ package com.wherestrangersmeet.backend.service;
 import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +18,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PresenceService {
 
+    private static final Logger log = LoggerFactory.getLogger(PresenceService.class);
     private final UserRepository userRepository;
     private final UserService userService;
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
@@ -33,12 +36,12 @@ public class PresenceService {
         // Find all users currently marked as online
         List<User> onlineUsers = userRepository.findByIsOnlineTrue();
 
-        System.out.println("╔═════════════════════════════════════════════════════");
-        System.out.println("║ ⏰ PRESENCE SERVICE CHECK");
-        System.out.println("║ Time: " + timestamp);
-        System.out.println("║ Threshold: " + threshold.format(FORMATTER) + " (60s ago)");
-        System.out.println("║ Online Users Found: " + onlineUsers.size());
-        System.out.println("╠═════════════════════════════════════════════════════");
+        log.info("╔═════════════════════════════════════════════════════");
+        log.info("║ ⏰ PRESENCE SERVICE CHECK");
+        log.info("║ Time: {}", timestamp);
+        log.info("║ Threshold: {} (60s ago)", threshold.format(FORMATTER));
+        log.info("║ Online Users Found: {}", onlineUsers.size());
+        log.info("╠═════════════════════════════════════════════════════");
 
         int markedOffline = 0;
 
@@ -48,23 +51,23 @@ public class PresenceService {
             long secondsSinceActive = lastActive != null ?
                 ChronoUnit.SECONDS.between(lastActive, LocalDateTime.now()) : -1;
 
-            System.out.println("║ Checking User " + user.getId() + " (" + user.getName() + ")");
-            System.out.println("║   lastActive: " + lastActiveStr);
-            System.out.println("║   Seconds since active: " + secondsSinceActive);
+            log.info("║ Checking User {} ({})", user.getId(), user.getName());
+            log.info("║   lastActive: {}", lastActiveStr);
+            log.info("║   Seconds since active: {}", secondsSinceActive);
 
             // If lastActive is null or older than 60 seconds, mark as offline
             if (lastActive == null || lastActive.isBefore(threshold)) {
-                System.out.println("║   Decision: ❌ STALE - Marking OFFLINE");
+                log.info("║   Decision: ❌ STALE - Marking OFFLINE");
 
                 userService.updateUserStatus(user.getId(), false, "PresenceService-Timeout");
                 markedOffline++;
             } else {
-                System.out.println("║   Decision: ✅ ACTIVE - Keeping ONLINE");
+                log.info("║   Decision: ✅ ACTIVE - Keeping ONLINE");
             }
-            System.out.println("║ ─────────────────────────────────────────────────");
+            log.info("║ ─────────────────────────────────────────────────");
         }
 
-        System.out.println("║ Summary: " + markedOffline + "/" + onlineUsers.size() + " users marked offline");
-        System.out.println("╚═════════════════════════════════════════════════════");
+        log.info("║ Summary: {}/{} users marked offline", markedOffline, onlineUsers.size());
+        log.info("╚═════════════════════════════════════════════════════");
     }
 }
