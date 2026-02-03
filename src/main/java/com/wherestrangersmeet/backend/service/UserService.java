@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
@@ -158,18 +159,45 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Delete from Firebase Auth
+        System.out.println("🗑️ Soft deleting user: " + user.getId() + " (" + user.getEmail() + ")");
+
+        // Delete from Firebase Auth first
         if (user.getFirebaseUid() != null) {
             try {
                 com.google.firebase.auth.FirebaseAuth.getInstance().deleteUser(user.getFirebaseUid());
-                System.out.println("Deleted user from Firebase: " + user.getFirebaseUid());
+                System.out.println("✅ Deleted user from Firebase: " + user.getFirebaseUid());
             } catch (com.google.firebase.auth.FirebaseAuthException e) {
-                System.err.println("Failed to delete user from Firebase: " + e.getMessage());
-                // Continue to delete from local DB even if Firebase fails
+                System.err.println("⚠️ Failed to delete user from Firebase: " + e.getMessage());
+                // Continue with soft delete even if Firebase fails
             }
         }
 
-        userRepository.deleteById(id);
+        // Soft delete: Mark as deleted and anonymize personal data
+        user.setDeletedAt(LocalDateTime.now());
+
+        // Anonymize user data (preserve ID for foreign key relationships)
+        user.setName("Deleted User");
+        user.setEmail("deleted_" + user.getId() + "@deleted.com");
+        user.setFirebaseUid("deleted_" + user.getId()); // Can't be null due to NOT NULL constraint
+        user.setPhoneNumber(null);
+        user.setAvatarUrl(null);
+        user.setBio(null);
+        user.setFcmToken(null);
+        user.setIsOnline(false);
+
+        // Clear onboarding data
+        user.setFutureGoals(null);
+        user.setOccupationTitle(null);
+        user.setInstitution(null);
+        user.setOccupationYear(null);
+        user.setOccupationDescription(null);
+        user.setInterestTags(new ArrayList<>());
+
+        // Delete user photos
+        user.getPhotos().clear();
+
+        userRepository.save(user);
+        System.out.println("✅ User soft deleted and anonymized successfully");
     }
 
     @Transactional
