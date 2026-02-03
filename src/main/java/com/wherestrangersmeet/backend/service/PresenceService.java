@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -15,6 +17,8 @@ import java.util.List;
 public class PresenceService {
 
     private final UserRepository userRepository;
+    private final UserService userService;
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     /**
      * Scheduled task that runs every 30 seconds to mark inactive users as offline.
@@ -23,27 +27,44 @@ public class PresenceService {
     @Scheduled(fixedRate = 30000) // Run every 30 seconds
     @Transactional
     public void markInactiveUsersOffline() {
-        // Calculate threshold: current time - 60 seconds
+        String timestamp = LocalDateTime.now().format(FORMATTER);
         LocalDateTime threshold = LocalDateTime.now().minusSeconds(60);
 
         // Find all users currently marked as online
         List<User> onlineUsers = userRepository.findByIsOnlineTrue();
 
+        System.out.println("╔═════════════════════════════════════════════════════");
+        System.out.println("║ ⏰ PRESENCE SERVICE CHECK");
+        System.out.println("║ Time: " + timestamp);
+        System.out.println("║ Threshold: " + threshold.format(FORMATTER) + " (60s ago)");
+        System.out.println("║ Online Users Found: " + onlineUsers.size());
+        System.out.println("╠═════════════════════════════════════════════════════");
+
         int markedOffline = 0;
 
         for (User user : onlineUsers) {
+            LocalDateTime lastActive = user.getLastActive();
+            String lastActiveStr = lastActive != null ? lastActive.format(FORMATTER) : "NULL";
+            long secondsSinceActive = lastActive != null ?
+                ChronoUnit.SECONDS.between(lastActive, LocalDateTime.now()) : -1;
+
+            System.out.println("║ Checking User " + user.getId() + " (" + user.getName() + ")");
+            System.out.println("║   lastActive: " + lastActiveStr);
+            System.out.println("║   Seconds since active: " + secondsSinceActive);
+
             // If lastActive is null or older than 60 seconds, mark as offline
-            if (user.getLastActive() == null || user.getLastActive().isBefore(threshold)) {
-                user.setIsOnline(false);
-                userRepository.save(user);
+            if (lastActive == null || lastActive.isBefore(threshold)) {
+                System.out.println("║   Decision: ❌ STALE - Marking OFFLINE");
+
+                userService.updateUserStatus(user.getId(), false, "PresenceService-Timeout");
                 markedOffline++;
-
-                System.out.println("🔴 User marked offline due to inactivity: " + user.getName() + " (ID: " + user.getId() + ")");
+            } else {
+                System.out.println("║   Decision: ✅ ACTIVE - Keeping ONLINE");
             }
+            System.out.println("║ ─────────────────────────────────────────────────");
         }
 
-        if (markedOffline > 0) {
-            System.out.println("📊 Presence check: " + markedOffline + " user(s) marked offline out of " + onlineUsers.size() + " online users");
-        }
+        System.out.println("║ Summary: " + markedOffline + "/" + onlineUsers.size() + " users marked offline");
+        System.out.println("╚═════════════════════════════════════════════════════");
     }
 }

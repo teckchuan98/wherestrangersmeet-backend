@@ -304,7 +304,21 @@ public class UserController {
 
         Boolean isOnline = request.get("isOnline");
         if (isOnline != null) {
-            userService.updateUserStatus(user.getId(), isOnline);
+            // Enhanced logging for HTTP status updates
+            String timestamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
+
+            System.out.println("┌─────────────────────────────────────────────────────");
+            System.out.println("│ 🌐 HTTP STATUS UPDATE");
+            System.out.println("│ Time: " + timestamp);
+            System.out.println("│ Endpoint: PUT /api/users/status");
+            System.out.println("│ User ID: " + user.getId());
+            System.out.println("│ Name: " + user.getName());
+            System.out.println("│ Request: isOnline=" + isOnline);
+            System.out.println("│ Source: HTTP Heartbeat (Frontend)");
+            System.out.println("└─────────────────────────────────────────────────────");
+
+            userService.updateUserStatus(user.getId(), isOnline, "HTTP-Heartbeat");
         }
 
         return ResponseEntity.ok().build();

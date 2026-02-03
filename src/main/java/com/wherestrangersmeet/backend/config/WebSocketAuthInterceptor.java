@@ -14,6 +14,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 
@@ -21,6 +23,7 @@ import java.util.List;
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
     private final UserService userService;
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     // Use @Lazy to break circular dependency
     public WebSocketAuthInterceptor(@Lazy UserService userService) {
@@ -30,6 +33,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+        String timestamp = LocalDateTime.now().format(FORMATTER);
 
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
             List<String> authorization = accessor.getNativeHeader("Authorization");
@@ -48,12 +52,28 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
                     // Mark user as ONLINE when WebSocket connects
                     userService.getUserByFirebaseUid(decodedToken.getUid()).ifPresent(user -> {
-                        userService.updateUserStatus(user.getId(), true);
-                        System.out.println("✅ WebSocket Connected: " + decodedToken.getUid() + " - User marked ONLINE");
+                        System.out.println("┌─────────────────────────────────────────────────────");
+                        System.out.println("│ 🔌 WEBSOCKET CONNECT");
+                        System.out.println("│ Time: " + timestamp);
+                        System.out.println("│ User ID: " + user.getId());
+                        System.out.println("│ Firebase UID: " + decodedToken.getUid());
+                        System.out.println("│ Name: " + user.getName());
+                        System.out.println("│ Session: " + accessor.getSessionId());
+                        System.out.println("│ Source: WebSocket CONNECT frame");
+
+                        userService.updateUserStatus(user.getId(), true, "WebSocket-CONNECT");
+
+                        System.out.println("│ Status: ✅ User marked ONLINE");
+                        System.out.println("└─────────────────────────────────────────────────────");
                     });
 
                 } catch (Exception e) {
-                    System.out.println("❌ WebSocket Auth Failed: " + e.getMessage());
+                    System.out.println("┌─────────────────────────────────────────────────────");
+                    System.out.println("│ ❌ WEBSOCKET AUTH FAILED");
+                    System.out.println("│ Time: " + timestamp);
+                    System.out.println("│ Error: " + e.getMessage());
+                    System.out.println("│ Session: " + accessor.getSessionId());
+                    System.out.println("└─────────────────────────────────────────────────────");
                 }
             }
         } else if (StompCommand.DISCONNECT.equals(accessor.getCommand())) {
@@ -61,8 +81,19 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             if (accessor.getUser() != null) {
                 String firebaseUid = accessor.getUser().getName();
                 userService.getUserByFirebaseUid(firebaseUid).ifPresent(user -> {
-                    userService.updateUserStatus(user.getId(), false);
-                    System.out.println("🔴 WebSocket Disconnected: " + firebaseUid + " - User marked OFFLINE");
+                    System.out.println("┌─────────────────────────────────────────────────────");
+                    System.out.println("│ 🔌 WEBSOCKET DISCONNECT");
+                    System.out.println("│ Time: " + timestamp);
+                    System.out.println("│ User ID: " + user.getId());
+                    System.out.println("│ Firebase UID: " + firebaseUid);
+                    System.out.println("│ Name: " + user.getName());
+                    System.out.println("│ Session: " + accessor.getSessionId());
+                    System.out.println("│ Source: WebSocket DISCONNECT frame");
+
+                    userService.updateUserStatus(user.getId(), false, "WebSocket-DISCONNECT");
+
+                    System.out.println("│ Status: 🔴 User marked OFFLINE");
+                    System.out.println("└─────────────────────────────────────────────────────");
                 });
             }
         }

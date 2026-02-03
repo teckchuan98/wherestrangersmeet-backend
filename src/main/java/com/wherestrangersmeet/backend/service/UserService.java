@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 import java.util.List;
 import java.util.HashMap;
@@ -172,10 +173,32 @@ public class UserService {
     }
 
     @Transactional
-    public void updateUserStatus(Long userId, boolean isOnline) {
+    public void updateUserStatus(Long userId, boolean isOnline, String source) {
         userRepository.findById(userId).ifPresent(user -> {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+            String timestamp = LocalDateTime.now().format(formatter);
+
+            // Log BEFORE update to see previous state
+            System.out.println("┌─────────────────────────────────────────────────────");
+            System.out.println("│ 📊 PRESENCE UPDATE REQUEST");
+            System.out.println("│ Time: " + timestamp);
+            System.out.println("│ User ID: " + userId);
+            System.out.println("│ Name: " + user.getName());
+            System.out.println("│ Current State: " + (user.getIsOnline() ? "ONLINE" : "OFFLINE"));
+            System.out.println("│ Current lastActive: " + user.getLastActive());
+            System.out.println("│ New State: " + (isOnline ? "ONLINE" : "OFFLINE"));
+            System.out.println("│ Source: " + source);
+
             user.setIsOnline(isOnline);
-            user.setLastActive(LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")));
+
+            // Only update lastActive when marking ONLINE (preserves actual last activity time)
+            if (isOnline) {
+                user.setLastActive(LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")));
+                System.out.println("│ Updated lastActive: " + user.getLastActive());
+            } else {
+                System.out.println("│ Preserved lastActive: " + user.getLastActive());
+            }
+
             userRepository.save(user);
 
             // Broadcast presence update to ALL users via WebSocket
@@ -184,13 +207,17 @@ public class UserService {
             presenceUpdate.put("isOnline", isOnline);
             presenceUpdate.put("timestamp", System.currentTimeMillis());
 
-            // Send to /topic/presence (public topic that all connected users can subscribe
-            // to)
             messagingTemplate.convertAndSend("/topic/presence", presenceUpdate);
 
-            System.out.println(
-                    "📡 Broadcasted presence update: User " + userId + " is " + (isOnline ? "ONLINE" : "OFFLINE"));
+            System.out.println("│ Broadcast: ✅ Sent to /topic/presence");
+            System.out.println("└─────────────────────────────────────────────────────");
         });
+    }
+
+    // Backward compatibility - calls new method with "Unknown-Source"
+    @Transactional
+    public void updateUserStatus(Long userId, boolean isOnline) {
+        updateUserStatus(userId, isOnline, "Unknown-Source");
     }
 
     @Transactional
