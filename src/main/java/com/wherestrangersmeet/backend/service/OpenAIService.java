@@ -68,7 +68,8 @@ public class OpenAIService {
                 // If validation failed (not a technical error), return immediately
                 // Example: "faces not visible" or "not same person"
                 if (result != null && result.containsKey("facesVisible")) {
-                    log.info("Verification completed on attempt {} (validation result: {})", attempt, result.get("valid"));
+                    log.info("Verification completed on attempt {} (validation result: {})", attempt,
+                            result.get("valid"));
                     return result;
                 }
 
@@ -99,7 +100,8 @@ public class OpenAIService {
         log.error("All {} attempts failed for photo verification", MAX_RETRIES);
         Map<String, Object> userFriendlyError = new HashMap<>();
         userFriendlyError.put("valid", false);
-        userFriendlyError.put("message", "We're having trouble verifying your photos. Please ensure your face is clearly visible and avoid sensitive content. Try retaking the photos or try again later.");
+        userFriendlyError.put("message",
+                "We're having trouble verifying your photos. Please ensure your face is clearly visible and avoid sensitive content. Try retaking the photos or try again later.");
         return userFriendlyError;
     }
 
@@ -333,7 +335,8 @@ public class OpenAIService {
     }
 
     /**
-     * Extracts JSON from OpenAI response that may contain markdown code blocks or extra text.
+     * Extracts JSON from OpenAI response that may contain markdown code blocks or
+     * extra text.
      * Handles cases like:
      * - Plain JSON: {"valid": true, ...}
      * - Markdown: ```json\n{"valid": true, ...}\n```
@@ -374,5 +377,100 @@ public class OpenAIService {
 
         // Case 4: Return as-is (might be plain JSON)
         return trimmed;
+    }
+
+    public Map<String, Object> verifyPhotoBase64(String base64NewPhoto, String mimeType,
+            List<String> referencePhotoUrls) {
+        log.info("OpenAIService.verifyPhotoBase64 called.");
+        if (apiKey == null || apiKey.isEmpty()) {
+            throw new RuntimeException("OpenAI API Key is not configured.");
+        }
+
+        String url = "https://api.openai.com/v1/chat/completions";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authorization", "Bearer " + apiKey);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("model", "gpt-4o");
+
+        List<Map<String, Object>> messages = new ArrayList<>();
+        Map<String, Object> userMessage = new HashMap<>();
+        userMessage.put("role", "user");
+
+        List<Map<String, Object>> content = new ArrayList<>();
+
+        // Text Prompt
+        Map<String, Object> textContent = new HashMap<>();
+        textContent.put("type", "text");
+        String prompt = "Analyze these images. The first image is the NEW photo. The subsequent images are reference photos of the SAME person.\n"
+                +
+                "1. Does the NEW photo clearly show a human face?\n" +
+                "2. Does the person in the NEW photo look like the same person in the reference photos (if provided)?\n"
+                +
+                "Return ONLY a JSON object: { \"faceVisible\": boolean, \"samePerson\": boolean, \"valid\": boolean, \"message\": string }.\n"
+                +
+                "If no reference photos are provided, 'samePerson' should be true (or ignored). 'valid' should be true only if faceVisible is true and samePerson is true (if references exist).";
+        textContent.put("text", prompt);
+        content.add(textContent);
+
+        // New Photo (Base64)
+        Map<String, Object> newPhotoContent = new HashMap<>();
+        newPhotoContent.put("type", "image_url");
+        Map<String, String> newPhotoUrlMap = new HashMap<>();
+        newPhotoUrlMap.put("url", "data:" + mimeType + ";base64," + base64NewPhoto);
+        newPhotoContent.put("image_url", newPhotoUrlMap);
+        content.add(newPhotoContent);
+
+        // Reference Photos
+        if (referencePhotoUrls != null) {
+            for (String refUrl : referencePhotoUrls) {
+                Map<String, Object> refPhotoContent = new HashMap<>();
+                refPhotoContent.put("type", "image_url");
+                Map<String, String> refPhotoUrlMap = new HashMap<>();
+                // Check if refUrl is already a data URI or a regular URL
+                refPhotoUrlMap.put("url", refUrl);
+                refPhotoContent.put("image_url", refPhotoUrlMap);
+                content.add(refPhotoContent);
+            }
+        }
+
+        userMessage.put("content", content);
+        messages.add(userMessage);
+        payload.put("messages", messages);
+        payload.put("max_tokens", 300);
+
+        // Enforce JSON mode
+        Map<String, String> format = new HashMap<>();
+        format.put("type", "json_object");
+        payload.put("response_format", format);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+
+        try {
+            log.info("Sending verification request to OpenAI (Base64 Mode)...");
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            log.info("OpenAI Keep-Alive Response: " + response.getStatusCode()); // Logging status
+
+            JsonNode root = objectMapper.readTree(response.getBody());
+
+            if (!root.has("choices") || root.path("choices").size() == 0) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("valid", false);
+                error.put("message", "OpenAI returned empty response");
+                return error;
+            }
+
+            String contentString = root.path("choices").get(0).path("message").path("content").asText();
+            String jsonString = extractJson(contentString);
+            return objectMapper.readValue(jsonString, Map.class);
+        } catch (Exception e) {
+            log.error("Error verifying photo (Base64): {}", e.getMessage(), e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("valid", false);
+            error.put("message", "Error verifying photo: " + e.getMessage());
+            return error;
+        }
     }
 }

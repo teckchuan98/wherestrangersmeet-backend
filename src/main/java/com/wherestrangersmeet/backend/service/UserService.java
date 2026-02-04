@@ -141,45 +141,71 @@ public class UserService {
     }
 
     @Transactional
-    public UserPhoto addUserPhoto(Long userId, String fileKey) {
+    public UserPhoto addUserPhoto(Long userId, String fileKey, boolean skipVerification) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String publicUrl = fileStorageService.getPublicUrl(fileKey);
 
         // --- VERIFICATION START ---
-        // 1. Gather reference URLs (existing photos)
-        List<String> referenceUrls = new ArrayList<>();
-        for (UserPhoto existing : user.getPhotos()) {
-            referenceUrls.add(existing.getUrl());
-        }
-
-        // 2. Call OpenAI Service
-        try {
-            log.info("Verifying new profile photo for user {} against {} references", userId, referenceUrls.size());
-            Map<String, Object> verificationResult = openAIService.verifyPhotoUrl(publicUrl, referenceUrls);
-
-            // 3. Check result
-            boolean isValid = (boolean) verificationResult.getOrDefault("valid", false);
-            if (!isValid) {
-                String errorMsg = (String) verificationResult.getOrDefault("message", "Photo verification failed");
-                log.warn("Photo verification failed for user {}: {}", userId, errorMsg);
-
-                // Cleanup: Delete the file from storage since we won't use it
-                // fileStorageService.deleteFile(fileKey); // Optional, if method exists
-
-                throw new RuntimeException("Verification failed: " + errorMsg);
+        if (!skipVerification) {
+            // 1. Gather reference URLs (existing photos) - Convert keys to Presigned URLs
+            List<String> referenceUrls = new ArrayList<>();
+            for (UserPhoto existing : user.getPhotos()) {
+                String refKey = existing.getUrl();
+                // If the stored URL is just a key, generate a presigned URL
+                String presignedRef = fileStorageService.generatePresignedUrl(refKey);
+                if (presignedRef != null) {
+                    referenceUrls.add(presignedRef);
+                }
             }
-            log.info("Photo verification successful for user {}", userId);
 
-        } catch (RuntimeException e) {
-            throw e; // Re-throw our validation errors
-        } catch (Exception e) {
-            log.error("Error during profile photo verification: {}", e.getMessage());
-            // Fail safe: If AI service is down, do we allow or block?
-            // Blocking for safety as requested:
-            throw new RuntimeException("Validation service unavailable. Please try again later.");
-        }
+            // 2. Call OpenAI Service
+            try {
+                // Generate presigned URL for the NEW photo specifically for verification
+                String verificationUrl = fileStorageService.generatePresignedUrl(fileKey);
+                Map<String, Object> verificationResult;
+
+                // Check if verificationUrl is valid (starts with http)
+                if (verificationUrl != null && verificationUrl.startsWith("http")) {
+                    log.info("Verifying with URL: {}", verificationUrl);
+                    verificationResult = openAIService.verifyPhotoUrl(verificationUrl, referenceUrls);
+                } else {
+                    // Fallback: URL generation failed, use Base64
+                    log.warn("URL generation failed (returned key), falling back to Base64 verification for key: {}",
+                            fileKey);
+                    try (java.io.InputStream is = fileStorageService.downloadFile(fileKey)) {
+                        byte[] imageBytes = is.readAllBytes();
+                        String base64Image = java.util.Base64.getEncoder().encodeToString(imageBytes);
+                        // Guess mime type from extension
+                        String mimeType = "image/jpeg";
+                        if (fileKey.toLowerCase().endsWith(".png"))
+                            mimeType = "image/png";
+
+                        verificationResult = openAIService.verifyPhotoBase64(base64Image, mimeType, referenceUrls);
+                    }
+                }
+
+                log.info("Verifying new profile photo for user {} against {} references", userId, referenceUrls.size());
+
+                // 3. Check result
+                boolean isValid = (boolean) verificationResult.getOrDefault("valid", false);
+                if (!isValid) {
+                    String errorMsg = (String) verificationResult.getOrDefault("message", "Photo verification failed");
+                    log.warn("Photo verification failed for user {}: {}", userId, errorMsg);
+                    throw new RuntimeException("Verification failed: " + errorMsg);
+                }
+
+                log.info("Photo verification successful for user {}", userId);
+
+            } catch (RuntimeException e) {
+                throw e; // Re-throw our validation errors
+            } catch (Exception e) {
+                log.error("Error during profile photo verification: {}", e.getMessage());
+                // Fail safe: If AI service is down, blocking for safety as requested:
+                throw new RuntimeException("Validation service unavailable. Please try again later.");
+            }
+        } // End of if (!skipVerification)
         // --- VERIFICATION END ---
 
         UserPhoto photo = new UserPhoto();

@@ -302,7 +302,8 @@ public class UserController {
     @PostMapping("/photos/confirm")
     public ResponseEntity<?> confirmPhotoUpload(
             @AuthenticationPrincipal FirebaseToken principal,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            @RequestParam(required = false, defaultValue = "false") boolean skipVerification) {
 
         User user = userService.getUserByFirebaseUid(principal.getUid())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
@@ -313,7 +314,7 @@ public class UserController {
         }
 
         try {
-            var photo = userService.addUserPhoto(user.getId(), key);
+            var photo = userService.addUserPhoto(user.getId(), key, skipVerification);
 
             // Convert to Presigned URL for immediate display
             if (photo.getUrl() != null) {
@@ -368,7 +369,7 @@ public class UserController {
         if (isOnline != null) {
             // Enhanced logging for HTTP status updates
             String timestamp = java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
 
             log.info("┌─────────────────────────────────────────────────────");
             log.info("│ 🌐 HTTP STATUS UPDATE");
