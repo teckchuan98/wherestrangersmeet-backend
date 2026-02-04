@@ -16,6 +16,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.io.IOException;
+import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.sync.RequestBody;
 import java.util.UUID;
 
 @Service
@@ -64,7 +67,34 @@ public class FileStorageService {
         Map<String, String> result = new HashMap<>();
         result.put("uploadUrl", uploadUrl);
         result.put("key", key);
+        result.put("key", key);
         return result;
+    }
+
+    public String uploadFile(MultipartFile file, String folder) throws IOException {
+        String originalFilename = file.getOriginalFilename();
+        String extension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+
+        if (BLOCKED_EXTENSIONS.contains(extension.toLowerCase())) {
+            throw new RuntimeException("File type not allowed");
+        }
+
+        String prefix = (folder != null && !folder.isEmpty()) ? (folder.endsWith("/") ? folder : folder + "/") : "";
+        String key = prefix + UUID.randomUUID().toString() + extension;
+
+        PutObjectRequest objectRequest = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .contentType(file.getContentType())
+                .build();
+
+        s3Client.putObject(objectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+
+        // Return the key (which will be presigned on read)
+        return key;
     }
 
     public java.io.InputStream downloadFile(String key) {

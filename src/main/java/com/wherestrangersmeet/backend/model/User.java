@@ -68,6 +68,9 @@ public class User {
     @Column(name = "fcm_token")
     private String fcmToken;
 
+    @Column(name = "voice_intro_url")
+    private String voiceIntroUrl;
+
     // Onboarding Fields
     @Enumerated(EnumType.STRING)
     @Column(length = 20)

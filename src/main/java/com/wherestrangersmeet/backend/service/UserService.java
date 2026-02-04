@@ -131,6 +131,14 @@ public class UserService {
     }
 
     @Transactional
+    public void updateVoiceIntro(Long userId, String voiceIntroUrl) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setVoiceIntroUrl(voiceIntroUrl);
+        userRepository.save(user);
+    }
+
+    @Transactional
     public User updatePhoneNumber(Long id, String phoneNumber) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -207,7 +215,7 @@ public class UserService {
                 throw new RuntimeException("Validation service unavailable. Please try again later.");
             }
         } // End of if (!skipVerification)
-        // --- VERIFICATION END ---
+          // --- VERIFICATION END ---
 
         UserPhoto photo = new UserPhoto();
         photo.setUser(user);

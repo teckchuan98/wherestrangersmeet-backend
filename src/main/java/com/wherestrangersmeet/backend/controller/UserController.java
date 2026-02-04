@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
+import java.util.Map;
 import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/users")
@@ -265,6 +267,33 @@ public class UserController {
 
         User updatedUser = userService.updatePhoneNumber(user.getId(), phoneNumber);
         return ResponseEntity.ok(updatedUser);
+    }
+
+    /**
+     * POST /api/users/voice-intro
+     * Upload and update user's voice intro
+     */
+    @PostMapping("/voice-intro")
+    public ResponseEntity<?> uploadVoiceIntro(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestParam("file") MultipartFile file) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User user = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        try {
+            // Upload to "voice-intros" folder
+            String fileUrl = fileStorageService.uploadFile(file, "voice-intros");
+            userService.updateVoiceIntro(user.getId(), fileUrl);
+            return ResponseEntity.ok(Map.of("url", fileUrl));
+        } catch (Exception e) {
+            log.error("Failed to upload voice intro", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to upload voice intro: " + e.getMessage()));
+        }
     }
 
     /**
