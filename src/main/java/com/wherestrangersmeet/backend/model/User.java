@@ -45,6 +45,15 @@ public class User {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Column(name = "avatar_crop_x")
+    private Double avatarCropX;
+
+    @Column(name = "avatar_crop_y")
+    private Double avatarCropY;
+
+    @Column(name = "avatar_crop_scale")
+    private Double avatarCropScale;
+
     @Column(columnDefinition = "TEXT")
     private String bio;
 

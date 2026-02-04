@@ -152,9 +152,63 @@ public class UserService {
 
         // Always update avatar URL to the new photo
         user.setAvatarUrl(publicUrl);
+        user.setAvatarCropX(null);
+        user.setAvatarCropY(null);
+        user.setAvatarCropScale(null);
         userRepository.save(user);
 
         return userPhotoRepository.save(photo);
+    }
+
+    @Transactional
+    public void deleteUserPhoto(Long userId, Long photoId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.getPhotos().size() <= 2) {
+            throw new IllegalStateException("Minimum 2 photos required");
+        }
+
+        UserPhoto photo = userPhotoRepository.findById(photoId)
+                .orElseThrow(() -> new RuntimeException("Photo not found"));
+
+        if (!photo.getUser().getId().equals(userId)) {
+            throw new RuntimeException("Photo does not belong to user");
+        }
+
+        boolean wasAvatar = user.getAvatarUrl() != null && user.getAvatarUrl().equals(photo.getUrl());
+
+        user.getPhotos().remove(photo);
+        userPhotoRepository.delete(photo);
+
+        if (wasAvatar) {
+            String newAvatar = user.getPhotos().isEmpty() ? null : user.getPhotos().get(0).getUrl();
+            user.setAvatarUrl(newAvatar);
+        }
+
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void setAvatarFromPhoto(Long userId, Long photoId) {
+        setAvatarFromPhoto(userId, photoId, null, null, null);
+    }
+
+    @Transactional
+    public void setAvatarFromPhoto(Long userId, Long photoId, Double cropX, Double cropY, Double cropScale) {
+        UserPhoto photo = userPhotoRepository.findById(photoId)
+                .orElseThrow(() -> new RuntimeException("Photo not found"));
+
+        if (!photo.getUser().getId().equals(userId)) {
+            throw new RuntimeException("Photo does not belong to user");
+        }
+
+        User user = photo.getUser();
+        user.setAvatarUrl(photo.getUrl());
+        user.setAvatarCropX(cropX);
+        user.setAvatarCropY(cropY);
+        user.setAvatarCropScale(cropScale);
+        userRepository.save(user);
     }
 
     @Transactional

@@ -119,6 +119,65 @@ public class UserController {
     }
 
     /**
+     * GET /api/users/{id}
+     * Get user profile by id
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getUserById(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @PathVariable Long id) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = userService.getUserById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        // Convert R2 keys to Presigned URLs
+        if (user.getAvatarUrl() != null) {
+            String presigned = fileStorageService.generatePresignedUrl(user.getAvatarUrl());
+            user.setAvatarUrl(presigned);
+        }
+
+        if (user.getPhotos() != null) {
+            user.getPhotos().parallelStream().forEach(photo -> {
+                if (photo.getUrl() != null) {
+                    String presigned = fileStorageService.generatePresignedUrl(photo.getUrl());
+                    photo.setUrl(presigned);
+                }
+            });
+        }
+
+        return ResponseEntity.ok(user);
+    }
+
+    /**
+     * GET /api/users/{id}/presence
+     * Get user presence (lightweight)
+     */
+    @GetMapping("/{id}/presence")
+    public ResponseEntity<?> getUserPresence(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @PathVariable Long id) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = userService.getUserById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        Map<String, Object> presence = new java.util.HashMap<>();
+        presence.put("id", user.getId());
+        presence.put("isOnline", user.getIsOnline());
+        presence.put("lastActive", user.getLastActive()); // may be null
+        return ResponseEntity.ok(presence);
+    }
+
+    /**
      * POST /api/users/onboarding
      * Update user details during onboarding (Basic Info & Occupation)
      */
@@ -367,5 +426,57 @@ public class UserController {
         }
 
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * DELETE /api/users/photos/{photoId}
+     * Delete a user photo (minimum 2 photos required)
+     */
+    @DeleteMapping("/photos/{photoId}")
+    public ResponseEntity<?> deletePhoto(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @PathVariable Long photoId) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User user = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        try {
+            userService.deleteUserPhoto(user.getId(), photoId);
+            return ResponseEntity.ok().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * PUT /api/users/photos/{photoId}/set-avatar
+     * Set profile picture from an existing user photo
+     */
+    @PutMapping("/photos/{photoId}/set-avatar")
+    public ResponseEntity<?> setAvatarFromPhoto(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @PathVariable Long photoId,
+            @RequestBody(required = false) Map<String, Double> request) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User user = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        try {
+            Double cropX = request != null ? request.get("cropX") : null;
+            Double cropY = request != null ? request.get("cropY") : null;
+            Double cropScale = request != null ? request.get("cropScale") : null;
+            userService.setAvatarFromPhoto(user.getId(), photoId, cropX, cropY, cropScale);
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        }
     }
 }
