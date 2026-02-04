@@ -62,6 +62,11 @@ public class UserController {
                     }
                 });
             }
+
+            // Process voice intro
+            if (user.getVoiceIntroUrl() != null) {
+                user.setVoiceIntroUrl(fileStorageService.generatePresignedUrl(user.getVoiceIntroUrl()));
+            }
         });
 
         return ResponseEntity.ok(users);
@@ -115,6 +120,12 @@ public class UserController {
             });
         }
 
+        // Convert voice intro key to Presigned URL
+        if (user.getVoiceIntroUrl() != null) {
+            String presigned = fileStorageService.generatePresignedUrl(user.getVoiceIntroUrl());
+            user.setVoiceIntroUrl(presigned);
+        }
+
         // System.out.println("========================================");
 
         return ResponseEntity.ok(user);
@@ -150,6 +161,12 @@ public class UserController {
                     photo.setUrl(presigned);
                 }
             });
+        }
+
+        // Convert voice intro key to Presigned URL
+        if (user.getVoiceIntroUrl() != null) {
+            String presigned = fileStorageService.generatePresignedUrl(user.getVoiceIntroUrl());
+            user.setVoiceIntroUrl(presigned);
         }
 
         return ResponseEntity.ok(user);
