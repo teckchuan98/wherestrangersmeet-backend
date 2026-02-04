@@ -72,12 +72,17 @@ public class VerificationController {
      */
     @PostMapping("/voice")
     public ResponseEntity<?> verifyVoice(
-            @AuthenticationPrincipal FirebaseToken principal,
+            HttpServletRequest request,
             @RequestParam("audio") MultipartFile audio,
             @RequestParam("name") String name) {
 
-        if (principal == null) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        log.info("Voice verification request received from IP: {}", request.getRemoteAddr());
+        String clientIp = request.getRemoteAddr();
+
+        if (isRateLimited(clientIp)) {
+            log.warn("Rate limit exceeded for IP: {}", clientIp);
+            return ResponseEntity.status(429)
+                    .body(Map.of("message", "Too many verification attempts. Please try again later."));
         }
 
         try {
