@@ -28,6 +28,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserPhotoRepository userPhotoRepository;
     private final FileStorageService fileStorageService;
+    private final OpenAIService openAIService;
     private final SimpMessagingTemplate messagingTemplate;
 
     public Optional<User> getUserByFirebaseUid(String firebaseUid) {
@@ -145,6 +146,41 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String publicUrl = fileStorageService.getPublicUrl(fileKey);
+
+        // --- VERIFICATION START ---
+        // 1. Gather reference URLs (existing photos)
+        List<String> referenceUrls = new ArrayList<>();
+        for (UserPhoto existing : user.getPhotos()) {
+            referenceUrls.add(existing.getUrl());
+        }
+
+        // 2. Call OpenAI Service
+        try {
+            log.info("Verifying new profile photo for user {} against {} references", userId, referenceUrls.size());
+            Map<String, Object> verificationResult = openAIService.verifyPhotoUrl(publicUrl, referenceUrls);
+
+            // 3. Check result
+            boolean isValid = (boolean) verificationResult.getOrDefault("valid", false);
+            if (!isValid) {
+                String errorMsg = (String) verificationResult.getOrDefault("message", "Photo verification failed");
+                log.warn("Photo verification failed for user {}: {}", userId, errorMsg);
+
+                // Cleanup: Delete the file from storage since we won't use it
+                // fileStorageService.deleteFile(fileKey); // Optional, if method exists
+
+                throw new RuntimeException("Verification failed: " + errorMsg);
+            }
+            log.info("Photo verification successful for user {}", userId);
+
+        } catch (RuntimeException e) {
+            throw e; // Re-throw our validation errors
+        } catch (Exception e) {
+            log.error("Error during profile photo verification: {}", e.getMessage());
+            // Fail safe: If AI service is down, do we allow or block?
+            // Blocking for safety as requested:
+            throw new RuntimeException("Validation service unavailable. Please try again later.");
+        }
+        // --- VERIFICATION END ---
 
         UserPhoto photo = new UserPhoto();
         photo.setUser(user);
@@ -276,7 +312,8 @@ public class UserService {
 
             user.setIsOnline(isOnline);
 
-            // Only update lastActive when marking ONLINE (preserves actual last activity time)
+            // Only update lastActive when marking ONLINE (preserves actual last activity
+            // time)
             if (isOnline) {
                 user.setLastActive(LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")));
                 log.info("│ Updated lastActive: {}", user.getLastActive());
