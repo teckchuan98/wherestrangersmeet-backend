@@ -102,6 +102,11 @@ public class MessageController {
                     senderId = newUser.getId();
 
                 } catch (com.google.firebase.auth.FirebaseAuthException fae) {
+                    // User was deleted from Firebase Auth - gracefully ignore
+                    if (fae.getMessage().contains("No user record found")) {
+                        log.warn("🚫 User was deleted from Firebase Auth, ignoring message: {}", principal.getName());
+                        return; // Exit gracefully without throwing
+                    }
                     log.error("❌ Failed to fetch user from Firebase: {}", fae.getMessage());
                     throw new RuntimeException("User not found and Firebase sync failed", fae);
                 }
