@@ -133,9 +133,46 @@ public class VerificationController {
         if (hasName && (hasGreeting || hasIntro))
             return true;
 
-        // 3. Levenshtein / Fuzzy Match (Optional, keeping it simple for now)
+        // 3. Levenshtein / Fuzzy Match
+        double similarity = calculateSimilarity(t, expected);
+        double similarityAlt = calculateSimilarity(t, expectedAlt);
 
-        return false;
+        log.info("Levenshtein similarity: {} (alt: {}) for '{}' vs '{}'", similarity, similarityAlt, t, expected);
+
+        // Threshold: 0.75 (75% match) allows for small phonetic errors like "Dee" vs
+        // "Teck"
+        return similarity >= 0.75 || similarityAlt >= 0.75;
+    }
+
+    private double calculateSimilarity(String s1, String s2) {
+        String longer = s1, shorter = s2;
+        if (s1.length() < s2.length()) { // longer should always have greater length
+            longer = s2;
+            shorter = s1;
+        }
+        int longerLength = longer.length();
+        if (longerLength == 0) {
+            return 1.0;
+            /* both strings are zero length */ }
+        int editDistance = calculateLevenshteinDistance(longer, shorter);
+        return (longerLength - editDistance) / (double) longerLength;
+    }
+
+    private int calculateLevenshteinDistance(String s1, String s2) {
+        int[] costs = new int[s2.length() + 1];
+        for (int j = 0; j < costs.length; j++)
+            costs[j] = j;
+        for (int i = 1; i <= s1.length(); i++) {
+            costs[0] = i;
+            int nw = i - 1;
+            for (int j = 1; j <= s2.length(); j++) {
+                int cj = Math.min(1 + Math.min(costs[j], costs[j - 1]),
+                        s1.charAt(i - 1) == s2.charAt(j - 1) ? nw : nw + 1);
+                nw = costs[j];
+                costs[j] = cj;
+            }
+        }
+        return costs[s2.length()];
     }
 
     private String normalize(String s) {
