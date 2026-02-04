@@ -8,7 +8,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import com.google.firebase.auth.FirebaseToken;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.HttpStatus;
 import java.time.Instant;
+import java.util.HashMap;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +64,77 @@ public class VerificationController {
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "Verification failed: " + e.getMessage()));
         }
+    }
+
+    /**
+     * POST /api/verification/voice
+     * Verify that the audio matches the expected text: "Hi, I am {Name}"
+     */
+    @PostMapping("/voice")
+    public ResponseEntity<?> verifyVoice(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestParam("audio") MultipartFile audio,
+            @RequestParam("name") String name) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        try {
+            log.info("Processing voice verification for: {}", name);
+
+            // 1. Transcribe audio using Whisper
+            String transcript = openAIService.transcribeAudio(audio);
+
+            // 2. Normalize and Compare
+            boolean isValid = verifyTranscript(transcript, name);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("valid", isValid);
+            response.put("transcript", transcript);
+            response.put("message",
+                    isValid ? "Verification successful" : "We heard: '" + transcript + "'. Please try again.");
+
+            log.info("Voice verification result: {} (Transcript: '{}')", isValid, transcript);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("Voice verification failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private boolean verifyTranscript(String transcript, String name) {
+        if (transcript == null)
+            return false;
+
+        // Normalize strings: lowercase, remove punctuation
+        String t = normalize(transcript);
+        String n = normalize(name);
+        String expected = normalize("Hi I am " + name);
+        String expectedAlt = normalize("Hi Im " + name); // Common contraction
+
+        // 1. Direct contains check (Simple)
+        if (t.contains(expected) || t.contains(expectedAlt))
+            return true;
+
+        // 2. Check key components
+        boolean hasGreeting = t.contains("hi") || t.contains("hello") || t.contains("hey");
+        boolean hasIntro = t.contains("i am") || t.contains("im") || t.contains("my name is");
+        boolean hasName = t.contains(n);
+
+        // Relaxed criteria: Needs name AND (greeting OR intro)
+        if (hasName && (hasGreeting || hasIntro))
+            return true;
+
+        // 3. Levenshtein / Fuzzy Match (Optional, keeping it simple for now)
+
+        return false;
+    }
+
+    private String normalize(String s) {
+        return s.toLowerCase().replaceAll("[^a-z ]", "").trim().replaceAll("\\s+", " ");
     }
 
     private boolean isRateLimited(String ip) {

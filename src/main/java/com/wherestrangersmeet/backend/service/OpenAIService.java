@@ -473,4 +473,50 @@ public class OpenAIService {
             return error;
         }
     }
+
+    public String transcribeAudio(MultipartFile audioFile) throws IOException {
+        log.info("OpenAIService.transcribeAudio called. Size: {}", audioFile.getSize());
+        if (apiKey == null || apiKey.isEmpty()) {
+            throw new RuntimeException("OpenAI API Key is not configured.");
+        }
+
+        String url = "https://api.openai.com/v1/audio/transcriptions";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + apiKey);
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+        org.springframework.util.MultiValueMap<String, Object> body = new org.springframework.util.LinkedMultiValueMap<>();
+        body.add("file", new org.springframework.core.io.ByteArrayResource(audioFile.getBytes()) {
+            @Override
+            public String getFilename() {
+                // OpenAI requires a filename with extension
+                String original = audioFile.getOriginalFilename();
+                return original != null && !original.isEmpty() ? original : "audio.m4a";
+            }
+        });
+        body.add("model", "whisper-1");
+        body.add("language", "en"); // Force English for now, or detect
+
+        HttpEntity<org.springframework.util.MultiValueMap<String, Object>> entity = new HttpEntity<>(body, headers);
+
+        try {
+            log.info("Sending audio to Whisper...");
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            log.info("Whisper Status: " + response.getStatusCode());
+
+            JsonNode root = objectMapper.readTree(response.getBody());
+            if (root.has("text")) {
+                String transcript = root.get("text").asText();
+                log.info("Transcript: {}", transcript);
+                return transcript;
+            } else {
+                throw new RuntimeException("No text found in Whisper response");
+            }
+
+        } catch (Exception e) {
+            log.error("Error transcribing audio: {}", e.getMessage(), e);
+            throw new RuntimeException("Transcription failed: " + e.getMessage());
+        }
+    }
 }
