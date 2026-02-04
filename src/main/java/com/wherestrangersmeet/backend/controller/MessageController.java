@@ -74,7 +74,39 @@ public class MessageController {
 
         try {
             // Get sender ID from cache (0ms instead of 10-30ms DB query)
-            Long senderId = userCache.getUserId(principal.getName());
+            Long senderId;
+            try {
+                senderId = userCache.getUserId(principal.getName());
+            } catch (RuntimeException e) {
+                // SELF-HEALING: User not found in cache/DB - JIT sync from Firebase
+                log.warn("⚠️ User not found in DB, attempting JIT sync from Firebase: {}", principal.getName());
+
+                try {
+                    // Fetch user details from Firebase Admin SDK
+                    com.google.firebase.auth.UserRecord firebaseUser =
+                        com.google.firebase.auth.FirebaseAuth.getInstance().getUser(principal.getName());
+
+                    String email = firebaseUser.getEmail();
+                    String name = firebaseUser.getDisplayName();
+                    String avatarUrl = firebaseUser.getPhotoUrl();
+
+                    // Create user in DB
+                    User newUser = userService.createUserIfNew(
+                        principal.getName(),
+                        email != null ? email : "unknown@unknown.com",
+                        name != null ? name : "User",
+                        avatarUrl
+                    );
+
+                    log.info("✅ JIT sync successful for user: {}", newUser.getEmail());
+                    senderId = newUser.getId();
+
+                } catch (com.google.firebase.auth.FirebaseAuthException fae) {
+                    log.error("❌ Failed to fetch user from Firebase: {}", fae.getMessage());
+                    throw new RuntimeException("User not found and Firebase sync failed", fae);
+                }
+            }
+
             Long receiverId = ((Number) payload.get("receiverId")).longValue();
 
             if (senderId.equals(receiverId)) {

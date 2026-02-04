@@ -30,6 +30,7 @@ public class UserService {
     private final FileStorageService fileStorageService;
     private final OpenAIService openAIService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final UserCache userCache;
 
     public Optional<User> getUserByFirebaseUid(String firebaseUid) {
         return userRepository.findByFirebaseUid(firebaseUid);
@@ -314,6 +315,11 @@ public class UserService {
 
         // Delete user photos
         user.getPhotos().clear();
+
+        // Invalidate cache before saving to prevent stale data
+        userCache.invalidateByFirebaseUid(user.getFirebaseUid());
+        userCache.invalidateByUserId(user.getId());
+        log.info("🗑️ Cache invalidated for deleted user");
 
         userRepository.save(user);
         log.info("✅ User soft deleted and anonymized successfully");
