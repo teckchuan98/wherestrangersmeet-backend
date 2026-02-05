@@ -36,7 +36,7 @@ public class AiService {
     private static final int MAX_INPUT_TOKENS = 10000;
 
     public enum AiMode {
-        BRIEF, DETAILED
+        BRIEF
     }
 
     public AiResponse generateResponse(List<Message> history, Message triggerMessage, AiMode mode) {
@@ -207,26 +207,14 @@ public class AiService {
                    - Match the user's slang/register (casual vs formal) appropriately.
                 """;
 
-        String depthInstruction;
-        if (mode == AiMode.DETAILED) {
-            depthInstruction = """
-                    3. **DEPTH & DETAIL (MOMOX MODE)**:
-                       - You are currently invoked as **MOMOX**.
-                       - Provide a **COMPREHENSIVE, IN-DEPTH, AND DETAILED** response.
-                       - Do NOT hold back length. Explain concepts fully, cover multiple angles, and provide extensive examples if relevant.
-                       - Use structured formatting (bullet points, numbered lists) to make long text readable.
-                       - Your goal is MAXIMUM INFORMATION and NUANCE.
-                    """;
-        } else {
-            depthInstruction = """
-                    3. **CONCISENESS (MOMO MODE)**:
-                       - You are currently invoked as **MOMO**.
-                       - Provide a **SHORT, CONCISE, AND PUNCHY** response.
-                       - Get straight to the point. One or two paragraphs maximum.
-                       - Avoid unnecessary fluff or preamble.
-                       - Your goal is CLARITY and BREVITY.
-                    """;
-        }
+        String depthInstruction = """
+                3. **CONCISENESS (MOMO MODE)**:
+                   - You are currently invoked as **MOMO**.
+                   - Provide a **SHORT, CONCISE, AND PUNCHY** response.
+                   - Get straight to the point. One or two paragraphs maximum.
+                   - Avoid unnecessary fluff or preamble.
+                   - Your goal is CLARITY and BREVITY.
+                """;
 
         String identityInstruction = """
                 4. **IDENTITY (CRITICAL)**:

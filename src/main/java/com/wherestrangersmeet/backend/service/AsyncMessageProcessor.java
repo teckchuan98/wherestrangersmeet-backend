@@ -78,19 +78,16 @@ public class AsyncMessageProcessor {
             }
         });
 
-        // 4. AI Trigger Detection (@momox or @momo)
-        // Only process if TEXT message and contains @momo or @momox (case-insensitive)
+        // 4. AI Trigger Detection (@momo)
+        // Only process if TEXT message and contains @momo (case-insensitive)
         if ("TEXT".equals(message.getMessageType()) && message.getText() != null) {
             String text = message.getText().toLowerCase();
-            boolean isMomox = text.contains("@momox");
             boolean isMomo = text.contains("@momo");
 
-            if (isMomox || isMomo) {
+            if (isMomo) {
                 // Prevent infinite loops if AI somehow says @ai (unlikely but safe)
-                if (message.getMessageType().startsWith("AI_"))
-                    return;
-
-                AiService.AiMode mode = isMomox ? AiService.AiMode.DETAILED : AiService.AiMode.BRIEF;
+                // Use brief mode
+                AiService.AiMode mode = AiService.AiMode.BRIEF;
                 handleAiTrigger(message, mode);
             }
         }
@@ -99,8 +96,7 @@ public class AsyncMessageProcessor {
     private void handleAiTrigger(Message originalMessage, AiService.AiMode mode) {
         try {
             // 0. Notify "Thinking" state (WebSocket ONLY, do not save to DB)
-            String thinkingText = (mode == AiService.AiMode.DETAILED) ? "MOMOX is thinking deeply..."
-                    : "MOMO AI is processing...";
+            String thinkingText = "MOMO AI is processing...";
             Message thinkingMsg = Message.builder()
                     .senderId(originalMessage.getSenderId()) // Ghost sender
                     .receiverId(originalMessage.getReceiverId())
