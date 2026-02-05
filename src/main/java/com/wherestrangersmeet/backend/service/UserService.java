@@ -355,7 +355,7 @@ public class UserService {
             // Only update lastActive when marking ONLINE (preserves actual last activity
             // time)
             if (isOnline) {
-                user.setLastActive(LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")));
+                user.setLastActive(LocalDateTime.now()); // Uses system default timezone (UTC)
                 log.info("│ Updated lastActive: {}", user.getLastActive());
             } else {
                 log.info("│ Preserved lastActive: {}", user.getLastActive());
