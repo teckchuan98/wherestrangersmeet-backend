@@ -1,8 +1,10 @@
 package com.wherestrangersmeet.backend.service;
 
 import com.wherestrangersmeet.backend.model.Message;
+import com.wherestrangersmeet.backend.model.SelfieExchange;
 import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.repository.MessageRepository;
+import com.wherestrangersmeet.backend.repository.SelfieExchangeRepository;
 import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ public class MessageService {
     private final MediaFileService mediaFileService;
     private final AsyncMessageProcessor asyncMessageProcessor;
     private final org.springframework.messaging.simp.SimpMessagingTemplate simpMessagingTemplate;
+    private final SelfieExchangeRepository selfieExchangeRepository;
     // Note: NotificationService logic moved to AsyncMessageProcessor
 
     // ORCHESTRATOR: Not Transactional (to avoid long-running DB connections)
@@ -189,7 +192,30 @@ public class MessageService {
             throw new RuntimeException("You can only delete your own messages");
         }
 
+        // Locked rule: completed selfie request messages cannot be deleted.
+        if ("SELFIE_REQUEST".equals(message.getMessageType())) {
+            Long exchangeId = extractSelfieExchangeId(message.getText());
+            if (exchangeId != null) {
+                selfieExchangeRepository.findById(exchangeId).ifPresent(exchange -> {
+                    if (exchange.getStatus() == SelfieExchange.Status.COMPLETED) {
+                        throw new IllegalStateException("Completed selfie request messages cannot be deleted");
+                    }
+                });
+            }
+        }
+
         message.setIsDeleted(true);
         messageRepository.save(message);
+    }
+
+    private Long extractSelfieExchangeId(String text) {
+        if (text == null) return null;
+        String prefix = "SELFIE_REQUEST:";
+        if (!text.startsWith(prefix)) return null;
+        try {
+            return Long.parseLong(text.substring(prefix.length()));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

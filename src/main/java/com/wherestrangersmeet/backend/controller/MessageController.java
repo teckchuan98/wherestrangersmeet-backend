@@ -287,6 +287,8 @@ public class MessageController {
         try {
             messageService.deleteMessage(id, currentUser.getId());
             return ResponseEntity.ok().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
