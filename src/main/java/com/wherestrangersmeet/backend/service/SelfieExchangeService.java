@@ -9,7 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -81,8 +80,8 @@ public class SelfieExchangeService {
         if (exchange.getStatus() == SelfieExchange.Status.CANCELLED) {
             throw new IllegalStateException("Selfie request was cancelled");
         }
-        if (exchange.getStatus() == SelfieExchange.Status.REQUESTED) {
-            throw new IllegalStateException("Selfie request has not been accepted yet");
+        if (exchange.getStatus() == SelfieExchange.Status.COMPLETED) {
+            return toDto(exchange, currentUserId);
         }
 
         if (exchange.getRequesterId().equals(currentUserId)) {
@@ -133,9 +132,20 @@ public class SelfieExchangeService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getActiveExchange(Long currentUserId, Long otherUserId) {
-        Optional<SelfieExchange> existing = selfieExchangeRepository
-                .findLatestActiveOrRequestedBetween(currentUserId, otherUserId);
-        return existing.map(exchange -> toDto(exchange, currentUserId)).orElse(null);
+        return selfieExchangeRepository
+                .findLatestActiveOrRequestedBetween(currentUserId, otherUserId)
+                .map(exchange -> toDto(exchange, currentUserId))
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getExchangeByIdForUser(Long exchangeId, Long currentUserId) {
+        SelfieExchange exchange = selfieExchangeRepository.findById(exchangeId)
+                .orElseThrow(() -> new IllegalArgumentException("Selfie request not found"));
+        if (!isParticipant(exchange, currentUserId)) {
+            throw new IllegalArgumentException("You are not a participant of this selfie exchange");
+        }
+        return toDto(exchange, currentUserId);
     }
 
     private boolean isParticipant(SelfieExchange exchange, Long userId) {

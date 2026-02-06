@@ -104,4 +104,22 @@ public class SelfieExchangeController {
         }
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getExchangeById(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @PathVariable Long id) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        User currentUser = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        try {
+            return ResponseEntity.ok(selfieExchangeService.getExchangeByIdForUser(id, currentUser.getId()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }
