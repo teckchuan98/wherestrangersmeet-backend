@@ -11,6 +11,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 @Service
@@ -486,13 +488,26 @@ public class OpenAIService {
         headers.set("Authorization", "Bearer " + apiKey);
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
+        byte[] uploadBytes = audioFile.getBytes();
+        String uploadFilename = resolveAudioFilename(audioFile);
+
+        try {
+            PreprocessedAudio preprocessed = preprocessAudioForWhisper(audioFile);
+            uploadBytes = preprocessed.bytes();
+            uploadFilename = preprocessed.filename();
+            log.info("Audio preprocessed for Whisper ({} bytes, file={})", uploadBytes.length, uploadFilename);
+        } catch (Exception e) {
+            // Safe fallback: continue with original audio if ffmpeg is unavailable or processing fails.
+            log.warn("Audio preprocessing skipped, falling back to raw input: {}", e.getMessage());
+        }
+
         org.springframework.util.MultiValueMap<String, Object> body = new org.springframework.util.LinkedMultiValueMap<>();
-        body.add("file", new org.springframework.core.io.ByteArrayResource(audioFile.getBytes()) {
+        final String finalUploadFilename = uploadFilename;
+        body.add("file", new org.springframework.core.io.ByteArrayResource(uploadBytes) {
             @Override
             public String getFilename() {
                 // OpenAI requires a filename with extension
-                String original = audioFile.getOriginalFilename();
-                return original != null && !original.isEmpty() ? original : "audio.m4a";
+                return finalUploadFilename;
             }
         });
         body.add("model", "whisper-1");
@@ -517,6 +532,66 @@ public class OpenAIService {
         } catch (Exception e) {
             log.error("Error transcribing audio: {}", e.getMessage(), e);
             throw new RuntimeException("Transcription failed: " + e.getMessage());
+        }
+    }
+
+    private record PreprocessedAudio(byte[] bytes, String filename) {
+    }
+
+    private String resolveAudioFilename(MultipartFile audioFile) {
+        String original = audioFile.getOriginalFilename();
+        return (original != null && !original.isBlank()) ? original : "audio.m4a";
+    }
+
+    private PreprocessedAudio preprocessAudioForWhisper(MultipartFile audioFile) throws IOException, InterruptedException {
+        Path inputPath = null;
+        Path outputPath = null;
+        try {
+            inputPath = Files.createTempFile("wsm-voice-in-", ".m4a");
+            outputPath = Files.createTempFile("wsm-voice-out-", ".wav");
+            audioFile.transferTo(inputPath.toFile());
+
+            List<String> command = Arrays.asList(
+                    "ffmpeg",
+                    "-y",
+                    "-i", inputPath.toString(),
+                    "-vn",
+                    "-af", "highpass=f=80,lowpass=f=8000,afftdn=nf=-25,loudnorm",
+                    "-ar", "16000",
+                    "-ac", "1",
+                    outputPath.toString()
+            );
+
+            Process process = new ProcessBuilder(command)
+                    .redirectErrorStream(true)
+                    .start();
+
+            String ffmpegOutput = new String(process.getInputStream().readAllBytes());
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IOException("ffmpeg failed with exit code " + exitCode + ": " + ffmpegOutput);
+            }
+
+            byte[] cleanedBytes = Files.readAllBytes(outputPath);
+            if (cleanedBytes.length == 0) {
+                throw new IOException("ffmpeg produced empty audio output");
+            }
+
+            return new PreprocessedAudio(cleanedBytes, "audio-cleaned.wav");
+        } finally {
+            safeDelete(inputPath);
+            safeDelete(outputPath);
+        }
+    }
+
+    private void safeDelete(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException ignored) {
+            // Best effort cleanup only.
         }
     }
 }
