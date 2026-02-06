@@ -110,6 +110,72 @@ public class VerificationController {
         }
     }
 
+    /**
+     * POST /api/verification/selfie
+     * Validate a single selfie image contains a human face.
+     */
+    @PostMapping("/selfie")
+    public ResponseEntity<?> verifySelfie(
+            HttpServletRequest request,
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestParam("photo") MultipartFile photo) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        log.info("Selfie verification request received from IP: {}", request.getRemoteAddr());
+        String clientIp = request.getRemoteAddr();
+
+        if (isRateLimited(clientIp)) {
+            log.warn("Rate limit exceeded for IP: {}", clientIp);
+            return ResponseEntity.status(429)
+                    .body(Map.of("message", "Too many verification attempts. Please try again later."));
+        }
+
+        try {
+            String mimeType = photo.getContentType() != null ? photo.getContentType() : "image/jpeg";
+            String base64Photo = java.util.Base64.getEncoder().encodeToString(photo.getBytes());
+
+            Map<String, Object> aiResult = openAIService.verifyPhotoBase64(
+                    base64Photo,
+                    mimeType,
+                    java.util.Collections.emptyList()
+            );
+
+            boolean valid = false;
+            Object validObj = aiResult.get("valid");
+            if (validObj instanceof Boolean b) {
+                valid = b;
+            }
+
+            // Backward compatibility with different key names returned by prompts.
+            if (!valid) {
+                Object faceVisibleObj = aiResult.get("faceVisible");
+                if (faceVisibleObj == null) {
+                    faceVisibleObj = aiResult.get("facesVisible");
+                }
+                if (faceVisibleObj instanceof Boolean b) {
+                    valid = b;
+                }
+            }
+
+            String message = valid
+                    ? "Selfie validated"
+                    : "This is not a selfie. Please capture a photo with your face clearly visible.";
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("valid", valid);
+            response.put("message", message);
+            response.put("raw", aiResult);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Selfie verification failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
     private boolean verifyTranscript(String transcript, String name) {
         if (transcript == null)
             return false;
