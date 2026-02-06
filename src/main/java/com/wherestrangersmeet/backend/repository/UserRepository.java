@@ -22,6 +22,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.isOnline = true AND u.deletedAt IS NULL")
     List<User> findByIsOnlineTrue();
 
+    boolean existsByPublicId(String publicId);
+
     // Pagination support: find users who are NOT the current user AND have at least one photo
     @Query("SELECT u FROM User u WHERE u.firebaseUid <> :firebaseUid AND SIZE(u.photos) > 0 AND u.deletedAt IS NULL")
     Page<User> findByFirebaseUidNotAndPhotosIsNotEmpty(@Param("firebaseUid") String firebaseUid, Pageable pageable);

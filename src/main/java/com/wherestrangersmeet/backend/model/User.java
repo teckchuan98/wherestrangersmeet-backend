@@ -39,6 +39,9 @@ public class User {
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "public_id", unique = true, nullable = false, length = 7)
+    private String publicId;
+
     @Column(name = "phone_number")
     private String phoneNumber;
 

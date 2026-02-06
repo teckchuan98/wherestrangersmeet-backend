@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
@@ -25,6 +26,9 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 public class UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
+    private static final char[] PUBLIC_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789".toCharArray();
+    private static final int PUBLIC_ID_LENGTH = 6;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private final UserRepository userRepository;
     private final UserPhotoRepository userPhotoRepository;
     private final FileStorageService fileStorageService;
@@ -55,7 +59,12 @@ public class UserService {
         Optional<User> existing = userRepository.findByFirebaseUid(firebaseUid);
         if (existing.isPresent()) {
             log.info("User already exists with UID: {}", firebaseUid);
-            return existing.get();
+            User user = existing.get();
+            if (user.getPublicId() == null || user.getPublicId().isBlank()) {
+                user.setPublicId(generateUniquePublicId());
+                return saveUser(user);
+            }
+            return user;
         }
 
         // Check by email to link accounts
@@ -66,7 +75,10 @@ public class UserService {
             user.setFirebaseUid(firebaseUid);
             if (avatarUrl != null)
                 user.setAvatarUrl(avatarUrl);
-            return userRepository.save(user);
+            if (user.getPublicId() == null || user.getPublicId().isBlank()) {
+                user.setPublicId(generateUniquePublicId());
+            }
+            return saveUser(user);
         }
 
         // Try to create new user
@@ -76,8 +88,9 @@ public class UserService {
             user.setEmail(email);
             user.setName(name != null ? name : email.split("@")[0]);
             user.setAvatarUrl(avatarUrl);
+            user.setPublicId(generateUniquePublicId());
             log.info("Creating new user: {}", email);
-            return userRepository.save(user);
+            return saveUser(user);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // Race condition: another thread just created this user
             // Retry the lookup
@@ -127,7 +140,7 @@ public class UserService {
             user.getInterestTags().addAll(interestTags);
         }
 
-        return userRepository.save(user);
+        return saveUser(user);
     }
 
     @Transactional
@@ -135,7 +148,7 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         user.setVoiceIntroUrl(voiceIntroUrl);
-        userRepository.save(user);
+        saveUser(user);
     }
 
     @Transactional
@@ -144,7 +157,7 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         if (phoneNumber != null && !phoneNumber.trim().isEmpty()) {
             user.setPhoneNumber(phoneNumber);
-            return userRepository.save(user);
+            return saveUser(user);
         }
         return user;
     }
@@ -226,7 +239,7 @@ public class UserService {
         user.setAvatarCropX(null);
         user.setAvatarCropY(null);
         user.setAvatarCropScale(null);
-        userRepository.save(user);
+        saveUser(user);
 
         return userPhotoRepository.save(photo);
     }
@@ -257,7 +270,7 @@ public class UserService {
             user.setAvatarUrl(newAvatar);
         }
 
-        userRepository.save(user);
+        saveUser(user);
     }
 
     @Transactional
@@ -279,7 +292,7 @@ public class UserService {
         user.setAvatarCropX(cropX);
         user.setAvatarCropY(cropY);
         user.setAvatarCropScale(cropScale);
-        userRepository.save(user);
+        saveUser(user);
     }
 
     @Transactional
@@ -329,7 +342,7 @@ public class UserService {
         userCache.invalidateByUserId(user.getId());
         log.info("🗑️ Cache invalidated for deleted user");
 
-        userRepository.save(user);
+        saveUser(user);
         log.info("✅ User soft deleted and anonymized successfully");
     }
 
@@ -361,7 +374,7 @@ public class UserService {
                 log.info("│ Preserved lastActive: {}", user.getLastActive());
             }
 
-            userRepository.save(user);
+            saveUser(user);
 
             // Broadcast presence update to ALL users via WebSocket
             Map<String, Object> presenceUpdate = new HashMap<>();
@@ -386,8 +399,39 @@ public class UserService {
     public void updateFcmToken(Long userId, String token) {
         userRepository.findById(userId).ifPresent(user -> {
             user.setFcmToken(token);
-            userRepository.save(user);
+            saveUser(user);
         });
+    }
+
+    private User saveUser(User user) {
+        if (user.getPublicId() == null || user.getPublicId().isBlank()) {
+            user.setPublicId(generateUniquePublicId());
+        }
+        return userRepository.save(user);
+    }
+
+    private String generateUniquePublicId() {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            String candidate = "#" + randomAlphaNumeric(PUBLIC_ID_LENGTH);
+            if (!userRepository.existsByPublicId(candidate)) {
+                return candidate;
+            }
+        }
+
+        // Extremely unlikely fallback path.
+        String candidate;
+        do {
+            candidate = "#" + randomAlphaNumeric(PUBLIC_ID_LENGTH);
+        } while (userRepository.existsByPublicId(candidate));
+        return candidate;
+    }
+
+    private String randomAlphaNumeric(int length) {
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(PUBLIC_ID_CHARS[SECURE_RANDOM.nextInt(PUBLIC_ID_CHARS.length)]);
+        }
+        return sb.toString();
     }
 
     @Transactional
@@ -399,6 +443,6 @@ public class UserService {
         if (tags != null) {
             user.getInterestTags().addAll(tags);
         }
-        return userRepository.save(user);
+        return saveUser(user);
     }
 }
