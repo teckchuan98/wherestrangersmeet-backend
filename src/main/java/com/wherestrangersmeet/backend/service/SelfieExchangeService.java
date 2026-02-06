@@ -27,12 +27,6 @@ public class SelfieExchangeService {
             throw new IllegalArgumentException("Cannot create selfie request to yourself");
         }
 
-        Optional<SelfieExchange> existing = selfieExchangeRepository
-                .findLatestActiveOrRequestedBetween(requesterId, receiverId);
-        if (existing.isPresent()) {
-            return toDto(existing.get(), requesterId);
-        }
-
         SelfieExchange exchange = SelfieExchange.builder()
                 .requesterId(requesterId)
                 .receiverId(receiverId)
