@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+
 import java.util.Optional;
 import java.util.List;
 import java.util.HashMap;
@@ -349,29 +349,12 @@ public class UserService {
     @Transactional
     public void updateUserStatus(Long userId, boolean isOnline, String source) {
         userRepository.findById(userId).ifPresent(user -> {
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-            String timestamp = LocalDateTime.now().format(formatter);
-
-            // Log BEFORE update to see previous state
-            log.info("┌─────────────────────────────────────────────────────");
-            log.info("│ 📊 PRESENCE UPDATE REQUEST");
-            log.info("│ Time: {}", timestamp);
-            log.info("│ User ID: {}", userId);
-            log.info("│ Name: {}", user.getName());
-            log.info("│ Current State: {}", user.getIsOnline() ? "ONLINE" : "OFFLINE");
-            log.info("│ Current lastActive: {}", user.getLastActive());
-            log.info("│ New State: {}", isOnline ? "ONLINE" : "OFFLINE");
-            log.info("│ Source: {}", source);
-
             user.setIsOnline(isOnline);
 
             // Only update lastActive when marking ONLINE (preserves actual last activity
             // time)
             if (isOnline) {
                 user.setLastActive(LocalDateTime.now()); // Uses system default timezone (UTC)
-                log.info("│ Updated lastActive: {}", user.getLastActive());
-            } else {
-                log.info("│ Preserved lastActive: {}", user.getLastActive());
             }
 
             saveUser(user);
@@ -383,9 +366,6 @@ public class UserService {
             presenceUpdate.put("timestamp", System.currentTimeMillis());
 
             messagingTemplate.convertAndSend("/topic/presence", presenceUpdate);
-
-            log.info("│ Broadcast: ✅ Sent to /topic/presence");
-            log.info("└─────────────────────────────────────────────────────");
         });
     }
 
