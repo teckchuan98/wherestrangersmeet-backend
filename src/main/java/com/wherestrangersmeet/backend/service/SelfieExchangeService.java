@@ -98,29 +98,6 @@ public class SelfieExchangeService {
         if (requesterReady && receiverReady && exchange.getStatus() != SelfieExchange.Status.COMPLETED) {
             exchange.setStatus(SelfieExchange.Status.COMPLETED);
             SelfieExchange saved = selfieExchangeRepository.save(exchange);
-
-            // Reveal only when both submitted: now publish both as chat images.
-            messageService.sendMessage(
-                    saved.getRequesterId(),
-                    saved.getReceiverId(),
-                    "[Selfie Exchange]",
-                    "IMAGE",
-                    saved.getRequesterPhotoKey(),
-                    null,
-                    saved.getRequesterPhotoHash(),
-                    true
-            );
-            messageService.sendMessage(
-                    saved.getReceiverId(),
-                    saved.getRequesterId(),
-                    "[Selfie Exchange]",
-                    "IMAGE",
-                    saved.getReceiverPhotoKey(),
-                    null,
-                    saved.getReceiverPhotoHash(),
-                    true
-            );
-
             broadcastUpdate(saved);
             return toDto(saved, currentUserId);
         }
