@@ -130,6 +130,7 @@ public class UserService {
             String institution, String occupationYear, String occupationDescription, List<String> interestTags) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
 
         if (name != null && !name.trim().isEmpty()) {
             user.setName(name);
@@ -160,6 +161,7 @@ public class UserService {
     public void updateVoiceIntro(Long userId, String voiceIntroUrl) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
         user.setVoiceIntroUrl(voiceIntroUrl);
         saveUser(user);
     }
@@ -168,6 +170,7 @@ public class UserService {
     public User updatePhoneNumber(Long id, String phoneNumber) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
         if (phoneNumber != null && !phoneNumber.trim().isEmpty()) {
             user.setPhoneNumber(phoneNumber);
             return saveUser(user);
@@ -179,6 +182,7 @@ public class UserService {
     public UserPhoto addUserPhoto(Long userId, String fileKey, boolean skipVerification) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
 
         String publicUrl = fileStorageService.getPublicUrl(fileKey);
 
@@ -261,6 +265,7 @@ public class UserService {
     public void deleteUserPhoto(Long userId, Long photoId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
 
         if (user.getPhotos().size() <= 2) {
             throw new IllegalStateException("Minimum 2 photos required");
@@ -301,6 +306,7 @@ public class UserService {
         }
 
         User user = photo.getUser();
+        user = ensurePublicId(user);
         user.setAvatarUrl(photo.getUrl());
         user.setAvatarCropX(cropX);
         user.setAvatarCropY(cropY);
@@ -312,6 +318,7 @@ public class UserService {
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
 
         log.info("🗑️ Soft deleting user: {} ({})", user.getId(), user.getEmail());
 
@@ -391,6 +398,7 @@ public class UserService {
     @Transactional
     public void updateFcmToken(Long userId, String token) {
         userRepository.findById(userId).ifPresent(user -> {
+            user = ensurePublicId(user);
             user.setFcmToken(token);
             saveUser(user);
         });
@@ -406,6 +414,8 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("Reporter user not found"));
         User reportedUser = userRepository.findById(reportedUserId)
                 .orElseThrow(() -> new RuntimeException("Reported user not found"));
+        reporterUser = ensurePublicId(reporterUser);
+        reportedUser = ensurePublicId(reportedUser);
 
         Optional<UserReport> existing = userReportRepository.findFirstByReporterUserIdAndReportedUserId(
                 reporterUserId, reportedUserId);
