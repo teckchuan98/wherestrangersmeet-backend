@@ -254,6 +254,19 @@ public class UserController {
         String occupationDescription = (String) request.get("occupationDescription");
         List<String> interestTags = (List<String>) request.get("interestTags");
 
+        if (name == null || name.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "name is required"));
+        }
+        if (genderStr == null || genderStr.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "gender is required"));
+        }
+        if (occupationStatusStr == null || occupationStatusStr.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "occupationStatus is required"));
+        }
+        if (occupationTitle == null || occupationTitle.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "occupationTitle is required"));
+        }
+
         User.Gender gender = null;
         if (genderStr != null) {
             try {
