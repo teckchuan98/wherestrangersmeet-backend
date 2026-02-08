@@ -26,6 +26,28 @@ public class UserController {
     private final UserService userService;
     private final FileStorageService fileStorageService;
 
+    private User getOrCreateCurrentUser(FirebaseToken principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Authentication failed - no valid Firebase token");
+        }
+
+        return userService.getUserByFirebaseUid(principal.getUid()).orElseGet(() -> {
+            String email = principal.getEmail();
+            if (email == null || email.isBlank()) {
+                email = principal.getUid() + "@unknown.local";
+            }
+            String name = principal.getName();
+            if (name == null || name.isBlank()) {
+                name = "User";
+            }
+            return userService.createUserIfNew(
+                    principal.getUid(),
+                    email,
+                    name,
+                    principal.getPicture());
+        });
+    }
+
     /**
      * GET /api/users
      * Get all users for the feed
@@ -217,11 +239,7 @@ public class UserController {
 
         // System.out.println("Looking up user by Firebase UID: " + principal.getUid());
 
-        User user = userService.getUserByFirebaseUid(principal.getUid())
-                .orElseThrow(() -> {
-                    log.error("ERROR: User not found in database for UID: {}", principal.getUid());
-                    return new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
-                });
+        User user = getOrCreateCurrentUser(principal);
 
         // System.out.println("User found: ID=" + user.getId() + ", Name=" +
         // user.getName());
@@ -273,8 +291,7 @@ public class UserController {
             @AuthenticationPrincipal FirebaseToken principal,
             @RequestBody Map<String, String> request) {
 
-        User user = userService.getUserByFirebaseUid(principal.getUid())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        User user = getOrCreateCurrentUser(principal);
 
         String phoneNumber = request.get("phoneNumber");
         if (phoneNumber == null || phoneNumber.isEmpty()) {
@@ -297,8 +314,7 @@ public class UserController {
         if (principal == null)
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
 
-        User user = userService.getUserByFirebaseUid(principal.getUid())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        User user = getOrCreateCurrentUser(principal);
 
         try {
             // Upload to "voice-intros" folder
@@ -350,8 +366,7 @@ public class UserController {
             @RequestBody Map<String, String> request,
             @RequestParam(required = false, defaultValue = "false") boolean skipVerification) {
 
-        User user = userService.getUserByFirebaseUid(principal.getUid())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        User user = getOrCreateCurrentUser(principal);
 
         String key = request.get("key");
         if (key == null || key.isEmpty()) {
