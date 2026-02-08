@@ -1,7 +1,9 @@
 package com.wherestrangersmeet.backend.service;
 
+import com.wherestrangersmeet.backend.model.UserReport;
 import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.model.UserPhoto;
+import com.wherestrangersmeet.backend.repository.UserReportRepository;
 import com.wherestrangersmeet.backend.repository.UserPhotoRepository;
 import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.hibernate.Hibernate;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -18,6 +21,8 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
@@ -30,6 +35,7 @@ public class UserService {
     private static final int PUBLIC_ID_LENGTH = 6;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private final UserRepository userRepository;
+    private final UserReportRepository userReportRepository;
     private final UserPhotoRepository userPhotoRepository;
     private final FileStorageService fileStorageService;
     private final OpenAIService openAIService;
@@ -50,6 +56,13 @@ public class UserService {
 
     public org.springframework.data.domain.Page<User> getFeedUsers(String currentUid, int page, int size) {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        Optional<User> currentUser = userRepository.findByFirebaseUid(currentUid);
+        if (currentUser.isPresent()) {
+            Set<Long> excludedUserIds = getBlockedRelationshipUserIds(currentUser.get().getId());
+            if (!excludedUserIds.isEmpty()) {
+                return userRepository.findFeedUsersExcludingIds(currentUid, new ArrayList<>(excludedUserIds), pageable);
+            }
+        }
         return userRepository.findByFirebaseUidNotAndPhotosIsNotEmpty(currentUid, pageable);
     }
 
@@ -381,6 +394,64 @@ public class UserService {
             user.setFcmToken(token);
             saveUser(user);
         });
+    }
+
+    @Transactional
+    public boolean blockAndReportUser(Long reporterUserId, Long reportedUserId, String reason) {
+        if (reporterUserId.equals(reportedUserId)) {
+            throw new IllegalArgumentException("You cannot report yourself");
+        }
+
+        User reporterUser = userRepository.findById(reporterUserId)
+                .orElseThrow(() -> new RuntimeException("Reporter user not found"));
+        User reportedUser = userRepository.findById(reportedUserId)
+                .orElseThrow(() -> new RuntimeException("Reported user not found"));
+
+        Optional<UserReport> existing = userReportRepository.findFirstByReporterUserIdAndReportedUserId(
+                reporterUserId, reportedUserId);
+        if (existing.isPresent()) {
+            return false;
+        }
+
+        UserReport report = new UserReport();
+        report.setReporterUser(reporterUser);
+        report.setReportedUser(reportedUser);
+        report.setReason((reason == null || reason.isBlank()) ? "Blocked by user" : reason.trim());
+        userReportRepository.save(report);
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public List<User> getBlockedUsers(Long reporterUserId) {
+        List<UserReport> reports = userReportRepository.findByReporterUserIdOrderByCreatedAtDesc(reporterUserId);
+        List<User> blockedUsers = new ArrayList<>();
+        Set<Long> dedupe = new LinkedHashSet<>();
+        for (UserReport report : reports) {
+            User blockedUser = (User) Hibernate.unproxy(report.getReportedUser());
+            if (blockedUser != null && blockedUser.getDeletedAt() == null && dedupe.add(blockedUser.getId())) {
+                // Return a fully materialized entity to avoid Jackson serializing Hibernate proxy types.
+                userRepository.findById(blockedUser.getId()).ifPresent(blockedUsers::add);
+            }
+        }
+        return blockedUsers;
+    }
+
+    @Transactional
+    public void unblockUser(Long reporterUserId, Long blockedUserId) {
+        userReportRepository.deleteByReporterUserIdAndReportedUserId(reporterUserId, blockedUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<Long> getBlockedRelationshipUserIds(Long userId) {
+        Set<Long> blockedUserIds = new LinkedHashSet<>();
+        blockedUserIds.addAll(userReportRepository.findReportedUserIdsByReporterUserId(userId));
+        blockedUserIds.addAll(userReportRepository.findReporterUserIdsByReportedUserId(userId));
+        return blockedUserIds;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isUserPairBlocked(Long userId1, Long userId2) {
+        return userReportRepository.existsReportBetweenUsers(userId1, userId2);
     }
 
     private User saveUser(User user) {
