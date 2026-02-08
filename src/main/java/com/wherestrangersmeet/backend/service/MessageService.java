@@ -5,6 +5,7 @@ import com.wherestrangersmeet.backend.model.SelfieExchange;
 import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.repository.MessageRepository;
 import com.wherestrangersmeet.backend.repository.SelfieExchangeRepository;
+import com.wherestrangersmeet.backend.repository.UserReportRepository;
 import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ public class MessageService {
     private final AsyncMessageProcessor asyncMessageProcessor;
     private final org.springframework.messaging.simp.SimpMessagingTemplate simpMessagingTemplate;
     private final SelfieExchangeRepository selfieExchangeRepository;
+    private final UserReportRepository userReportRepository;
     // Note: NotificationService logic moved to AsyncMessageProcessor
 
     // ORCHESTRATOR: Not Transactional (to avoid long-running DB connections)
@@ -33,6 +35,7 @@ public class MessageService {
 
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
             Long replyToId, String attachmentHash, boolean broadcast) {
+        ensureNotBlocked(senderId, receiverId);
 
         // 1. SYNC: Save to DB (Fast, Ordered)
         Message savedMessage = saveMessageToDb(senderId, receiverId, text, messageType, attachmentUrl, replyToId,
@@ -84,6 +87,10 @@ public class MessageService {
 
     public List<Message> getConversation(Long userId1, Long userId2, int size,
             java.time.LocalDateTime beforeCreatedAt, Long beforeId) {
+        if (isUserPairBlocked(userId1, userId2)) {
+            return Collections.emptyList();
+        }
+
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, size);
         List<Message> messages;
         if (beforeCreatedAt != null && beforeId != null) {
@@ -105,12 +112,18 @@ public class MessageService {
 
     public List<Map<String, Object>> getConversations(Long userId) {
         List<Message> allMessages = messageRepository.findByUserId(userId);
+        Set<Long> blockedPartnerIds = new HashSet<>();
+        blockedPartnerIds.addAll(userReportRepository.findReportedUserIdsByReporterUserId(userId));
+        blockedPartnerIds.addAll(userReportRepository.findReporterUserIdsByReportedUserId(userId));
 
         // Map to store latest message per partner
         Map<Long, Message> latestMessages = new HashMap<>();
 
         for (Message m : allMessages) {
             Long partnerId = m.getSenderId().equals(userId) ? m.getReceiverId() : m.getSenderId();
+            if (blockedPartnerIds.contains(partnerId)) {
+                continue;
+            }
             // Since list is ordered by DESC, first encounter is the latest
             latestMessages.putIfAbsent(partnerId, m);
         }
@@ -217,5 +230,15 @@ public class MessageService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private void ensureNotBlocked(Long senderId, Long receiverId) {
+        if (isUserPairBlocked(senderId, receiverId)) {
+            throw new IllegalStateException("Cannot message a blocked user");
+        }
+    }
+
+    private boolean isUserPairBlocked(Long userId1, Long userId2) {
+        return userReportRepository.existsReportBetweenUsers(userId1, userId2);
     }
 }

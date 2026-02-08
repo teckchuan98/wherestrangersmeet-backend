@@ -34,7 +34,12 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String idToken = authHeader.substring(7);
+            String idToken = authHeader.substring(7).trim();
+
+            if (idToken.isEmpty() || "null".equalsIgnoreCase(idToken) || "undefined".equalsIgnoreCase(idToken)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
 
             try {
                 FirebaseToken decodedToken = firebaseAuth.verifyIdToken(idToken);
@@ -46,7 +51,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
             } catch (Exception e) {
-                logger.error("Firebase token verification failed", e);
+                logger.warn("Firebase token verification failed: {}", e.getMessage());
             }
         }
 

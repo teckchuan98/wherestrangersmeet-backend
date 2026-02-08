@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
-import java.util.Map;
 import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -135,7 +134,7 @@ public class UserController {
      * GET /api/users/{id}
      * Get user profile by id
      */
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     public ResponseEntity<?> getUserById(
             @AuthenticationPrincipal FirebaseToken principal,
             @PathVariable Long id) {
@@ -176,7 +175,7 @@ public class UserController {
      * GET /api/users/{id}/presence
      * Get user presence (lightweight)
      */
-    @GetMapping("/{id}/presence")
+    @GetMapping("/{id:\\d+}/presence")
     public ResponseEntity<?> getUserPresence(
             @AuthenticationPrincipal FirebaseToken principal,
             @PathVariable Long id) {
@@ -511,5 +510,121 @@ public class UserController {
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * POST /api/users/block-report
+     * Block and report a user in one action
+     */
+    @PostMapping("/block-report")
+    public ResponseEntity<?> blockAndReportUser(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody Map<String, Object> request) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User currentUser = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        Object reportedUserIdObj = request.get("reportedUserId");
+        if (!(reportedUserIdObj instanceof Number)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "reportedUserId is required"));
+        }
+
+        Long reportedUserId = ((Number) reportedUserIdObj).longValue();
+        String reason = (String) request.getOrDefault("reason", "Blocked in chat");
+
+        try {
+            boolean created = userService.blockAndReportUser(currentUser.getId(), reportedUserId, reason);
+            return ResponseEntity.ok(Map.of(
+                    "blocked", true,
+                    "reported", true,
+                    "alreadyBlocked", !created));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * GET /api/users/blocked
+     * List users blocked by current user
+     */
+    @GetMapping("/blocked")
+    public ResponseEntity<?> getBlockedUsers(@AuthenticationPrincipal FirebaseToken principal) {
+        log.warn("GET /api/users/blocked called");
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User currentUser = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        List<User> blockedUsers = userService.getBlockedUsers(currentUser.getId());
+        List<Map<String, Object>> payload = blockedUsers.stream().map(user -> {
+            Map<String, Object> item = new java.util.HashMap<>();
+            item.put("id", user.getId());
+            item.put("firebaseUid", user.getFirebaseUid());
+            item.put("email", user.getEmail());
+            item.put("name", user.getName());
+            item.put("publicId", user.getPublicId());
+            item.put("phoneNumber", user.getPhoneNumber());
+            item.put("avatarCropX", user.getAvatarCropX());
+            item.put("avatarCropY", user.getAvatarCropY());
+            item.put("avatarCropScale", user.getAvatarCropScale());
+            item.put("gender", user.getGender());
+            item.put("futureGoals", user.getFutureGoals());
+            item.put("occupationStatus", user.getOccupationStatus());
+            item.put("occupationTitle", user.getOccupationTitle());
+            item.put("institution", user.getInstitution());
+            item.put("occupationYear", user.getOccupationYear());
+            item.put("occupationDescription", user.getOccupationDescription());
+            item.put("interestTags", user.getInterestTags());
+            item.put("isOnline", user.getIsOnline());
+            item.put("lastActive", user.getLastActive());
+
+            String avatar = user.getAvatarUrl();
+            item.put("avatarUrl", avatar != null ? fileStorageService.generatePresignedUrl(avatar) : null);
+
+            String voiceIntro = user.getVoiceIntroUrl();
+            item.put("voiceIntroUrl", voiceIntro != null ? fileStorageService.generatePresignedUrl(voiceIntro) : null);
+
+            List<Map<String, Object>> photos = new java.util.ArrayList<>();
+            if (user.getPhotos() != null) {
+                for (var photo : user.getPhotos()) {
+                    Map<String, Object> photoMap = new java.util.HashMap<>();
+                    photoMap.put("id", photo.getId());
+                    photoMap.put("createdAt", photo.getCreatedAt());
+                    photoMap.put("url", photo.getUrl() != null
+                            ? fileStorageService.generatePresignedUrl(photo.getUrl())
+                            : null);
+                    photos.add(photoMap);
+                }
+            }
+            item.put("photos", photos);
+            return item;
+        }).toList();
+
+        return ResponseEntity.ok(payload);
+    }
+
+    /**
+     * DELETE /api/users/blocked/{blockedUserId}
+     * Unblock a previously blocked user
+     */
+    @DeleteMapping("/blocked/{blockedUserId}")
+    public ResponseEntity<?> unblockUser(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @PathVariable Long blockedUserId) {
+
+        if (principal == null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        User currentUser = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        userService.unblockUser(currentUser.getId(), blockedUserId);
+        return ResponseEntity.ok(Map.of("unblocked", true));
     }
 }

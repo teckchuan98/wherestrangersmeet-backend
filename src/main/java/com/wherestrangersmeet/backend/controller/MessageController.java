@@ -59,9 +59,13 @@ public class MessageController {
         Object replyToIdObj = payload.get("replyToId");
         Long replyToId = replyToIdObj != null ? ((Number) replyToIdObj).longValue() : null;
 
-        Message message = messageService.sendMessage(sender.getId(), receiverId, text, messageType, attachmentUrl,
-                replyToId, attachmentHash);
-        return ResponseEntity.ok(message);
+        try {
+            Message message = messageService.sendMessage(sender.getId(), receiverId, text, messageType, attachmentUrl,
+                    replyToId, attachmentHash);
+            return ResponseEntity.ok(message);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
     }
 
     // Send a message via WebSocket
@@ -128,8 +132,14 @@ public class MessageController {
             Long replyToId = replyToIdObj != null ? ((Number) replyToIdObj).longValue() : null;
 
             // Save message (now much faster with cached user lookups)
-            Message savedMessage = messageService.sendMessage(senderId, receiverId, text, messageType,
-                    attachmentUrl, replyToId, attachmentHash, false);
+            Message savedMessage;
+            try {
+                savedMessage = messageService.sendMessage(senderId, receiverId, text, messageType,
+                        attachmentUrl, replyToId, attachmentHash, false);
+            } catch (IllegalStateException e) {
+                log.warn("🚫 Message blocked between users {} and {}", senderId, receiverId);
+                return;
+            }
 
             // Get receiver Firebase UID from cache (0ms instead of 10-30ms)
             String receiverFirebaseUid = userCache.getFirebaseUid(receiverId);

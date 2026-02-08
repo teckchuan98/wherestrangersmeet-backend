@@ -27,4 +27,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // Pagination support: find users who are NOT the current user AND have at least one photo
     @Query("SELECT u FROM User u WHERE u.firebaseUid <> :firebaseUid AND SIZE(u.photos) > 0 AND u.deletedAt IS NULL")
     Page<User> findByFirebaseUidNotAndPhotosIsNotEmpty(@Param("firebaseUid") String firebaseUid, Pageable pageable);
+
+    @Query("SELECT u FROM User u WHERE u.firebaseUid <> :firebaseUid AND SIZE(u.photos) > 0 AND u.deletedAt IS NULL AND u.id NOT IN :excludedIds")
+    Page<User> findFeedUsersExcludingIds(
+            @Param("firebaseUid") String firebaseUid,
+            @Param("excludedIds") List<Long> excludedIds,
+            Pageable pageable);
 }
