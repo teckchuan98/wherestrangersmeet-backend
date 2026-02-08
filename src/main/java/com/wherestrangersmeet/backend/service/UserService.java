@@ -43,11 +43,11 @@ public class UserService {
     private final UserCache userCache;
 
     public Optional<User> getUserByFirebaseUid(String firebaseUid) {
-        return userRepository.findByFirebaseUid(firebaseUid);
+        return userRepository.findByFirebaseUid(firebaseUid).map(this::ensurePublicId);
     }
 
     public Optional<User> getUserById(Long id) {
-        return userRepository.findById(id);
+        return userRepository.findById(id).map(this::ensurePublicId);
     }
 
     public List<User> getAllUsers() {
@@ -111,12 +111,12 @@ public class UserService {
 
             existing = userRepository.findByFirebaseUid(firebaseUid);
             if (existing.isPresent()) {
-                return existing.get();
+                return ensurePublicId(existing.get());
             }
 
             existingByEmail = userRepository.findByEmail(email);
             if (existingByEmail.isPresent()) {
-                return existingByEmail.get();
+                return ensurePublicId(existingByEmail.get());
             }
 
             // If still not found, rethrow the exception
@@ -459,6 +459,13 @@ public class UserService {
             user.setPublicId(generateUniquePublicId());
         }
         return userRepository.save(user);
+    }
+
+    private User ensurePublicId(User user) {
+        if (user.getPublicId() == null || user.getPublicId().isBlank()) {
+            return saveUser(user);
+        }
+        return user;
     }
 
     private String generateUniquePublicId() {
