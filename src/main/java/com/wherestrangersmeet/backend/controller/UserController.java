@@ -268,21 +268,24 @@ public class UserController {
         }
 
         User.Gender gender = null;
-        if (genderStr != null) {
-            try {
-                gender = User.Gender.valueOf(genderStr.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid gender value: {}", genderStr);
-            }
+        try {
+            gender = User.Gender.valueOf(genderStr.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid gender value: {}", genderStr);
         }
 
         User.OccupationStatus occupationStatus = null;
-        if (occupationStatusStr != null) {
-            try {
-                occupationStatus = User.OccupationStatus.valueOf(occupationStatusStr.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid occupation status value: {}", occupationStatusStr);
-            }
+        try {
+            occupationStatus = User.OccupationStatus.valueOf(occupationStatusStr.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid occupation status value: {}", occupationStatusStr);
+        }
+
+        if (gender == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid gender value: " + genderStr));
+        }
+        if (occupationStatus == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid occupationStatus value: " + occupationStatusStr));
         }
 
         User updatedUser = userService.updateOnboardingDetails(user.getId(), gender, futureGoals, occupationStatus,

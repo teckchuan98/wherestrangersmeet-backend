@@ -368,25 +368,21 @@ public class UserService {
 
     @Transactional
     public void updateUserStatus(Long userId, boolean isOnline, String source) {
-        userRepository.findById(userId).ifPresent(user -> {
-            user.setIsOnline(isOnline);
+        // Presence updates can happen concurrently with onboarding/profile writes.
+        // Use a partial UPDATE to avoid stale entity snapshots clobbering other fields.
+        LocalDateTime now = LocalDateTime.now();
+        int updatedRows = userRepository.updatePresence(userId, isOnline, now);
+        if (updatedRows <= 0) {
+            return;
+        }
 
-            // Only update lastActive when marking ONLINE (preserves actual last activity
-            // time)
-            if (isOnline) {
-                user.setLastActive(LocalDateTime.now()); // Uses system default timezone (UTC)
-            }
+        // Broadcast presence update to ALL users via WebSocket
+        Map<String, Object> presenceUpdate = new HashMap<>();
+        presenceUpdate.put("userId", userId);
+        presenceUpdate.put("isOnline", isOnline);
+        presenceUpdate.put("timestamp", System.currentTimeMillis());
 
-            saveUser(user);
-
-            // Broadcast presence update to ALL users via WebSocket
-            Map<String, Object> presenceUpdate = new HashMap<>();
-            presenceUpdate.put("userId", userId);
-            presenceUpdate.put("isOnline", isOnline);
-            presenceUpdate.put("timestamp", System.currentTimeMillis());
-
-            messagingTemplate.convertAndSend("/topic/presence", presenceUpdate);
-        });
+        messagingTemplate.convertAndSend("/topic/presence", presenceUpdate);
     }
 
     // Backward compatibility - calls new method with "Unknown-Source"
@@ -439,7 +435,8 @@ public class UserService {
         for (UserReport report : reports) {
             User blockedUser = (User) Hibernate.unproxy(report.getReportedUser());
             if (blockedUser != null && blockedUser.getDeletedAt() == null && dedupe.add(blockedUser.getId())) {
-                // Return a fully materialized entity to avoid Jackson serializing Hibernate proxy types.
+                // Return a fully materialized entity to avoid Jackson serializing Hibernate
+                // proxy types.
                 userRepository.findById(blockedUser.getId()).ifPresent(blockedUsers::add);
             }
         }
@@ -468,7 +465,16 @@ public class UserService {
         if (user.getPublicId() == null || user.getPublicId().isBlank()) {
             user.setPublicId(generateUniquePublicId());
         }
-        return userRepository.save(user);
+
+        // Invalidate caches to ensure fresh data is fetched
+        if (user.getFirebaseUid() != null) {
+            userCache.invalidateByFirebaseUid(user.getFirebaseUid());
+        }
+        if (user.getId() != null) {
+            userCache.invalidateByUserId(user.getId());
+        }
+
+        return userRepository.saveAndFlush(user);
     }
 
     private User ensurePublicId(User user) {

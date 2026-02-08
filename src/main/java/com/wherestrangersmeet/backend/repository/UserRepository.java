@@ -2,6 +2,7 @@ package com.wherestrangersmeet.backend.repository;
 
 import com.wherestrangersmeet.backend.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
@@ -33,4 +34,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("firebaseUid") String firebaseUid,
             @Param("excludedIds") List<Long> excludedIds,
             Pageable pageable);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE User u
+            SET u.isOnline = :isOnline,
+                u.lastActive = CASE WHEN :isOnline = true THEN :lastActive ELSE u.lastActive END
+            WHERE u.id = :userId
+            """)
+    int updatePresence(
+            @Param("userId") Long userId,
+            @Param("isOnline") boolean isOnline,
+            @Param("lastActive") java.time.LocalDateTime lastActive);
 }
