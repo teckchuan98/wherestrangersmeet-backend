@@ -31,6 +31,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 public class UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
+    public static final String CURRENT_AI_CONSENT_VERSION = "2026-02-19";
     private static final char[] PUBLIC_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789".toCharArray();
     private static final int PUBLIC_ID_LENGTH = 6;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -188,6 +189,9 @@ public class UserService {
 
         // --- VERIFICATION START ---
         if (!skipVerification) {
+            if (!hasAcceptedAiConsent(user)) {
+                throw new RuntimeException("AI consent is required before using AI verification.");
+            }
             // 1. Gather reference URLs (existing photos) - Convert keys to Presigned URLs
             List<String> referenceUrls = new ArrayList<>();
             for (UserPhoto existing : user.getPhotos()) {
@@ -518,5 +522,49 @@ public class UserService {
             user.getInterestTags().addAll(tags);
         }
         return saveUser(user);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasAcceptedAiConsent(Long userId) {
+        return userRepository.findById(userId)
+                .map(this::hasAcceptedAiConsent)
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasAcceptedAiConsentByFirebaseUid(String firebaseUid) {
+        return userRepository.findByFirebaseUid(firebaseUid)
+                .map(this::hasAcceptedAiConsent)
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public String getCurrentAiConsentVersion() {
+        return CURRENT_AI_CONSENT_VERSION;
+    }
+
+    @Transactional
+    public User acceptAiConsent(Long userId, String requestedVersion) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
+
+        String acceptedVersion = (requestedVersion == null || requestedVersion.isBlank())
+                ? CURRENT_AI_CONSENT_VERSION
+                : requestedVersion.trim();
+
+        if (!CURRENT_AI_CONSENT_VERSION.equals(acceptedVersion)) {
+            throw new IllegalArgumentException("Unsupported AI consent version");
+        }
+
+        user.setAiConsentAccepted(true);
+        user.setAiConsentVersion(acceptedVersion);
+        user.setAiConsentAcceptedAt(LocalDateTime.now());
+        return saveUser(user);
+    }
+
+    private boolean hasAcceptedAiConsent(User user) {
+        return Boolean.TRUE.equals(user.getAiConsentAccepted())
+                && CURRENT_AI_CONSENT_VERSION.equals(user.getAiConsentVersion());
     }
 }

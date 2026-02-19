@@ -153,6 +153,56 @@ public class UserController {
     }
 
     /**
+     * GET /api/users/ai-consent
+     * Get current AI consent status for authenticated user.
+     */
+    @GetMapping("/ai-consent")
+    public ResponseEntity<?> getAiConsentStatus(@AuthenticationPrincipal FirebaseToken principal) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = getOrCreateCurrentUser(principal);
+        boolean accepted = userService.hasAcceptedAiConsent(user.getId());
+
+        return ResponseEntity.ok(Map.of(
+                "accepted", accepted,
+                "acceptedVersion", user.getAiConsentVersion(),
+                "acceptedAt", user.getAiConsentAcceptedAt(),
+                "currentVersion", userService.getCurrentAiConsentVersion()));
+    }
+
+    /**
+     * PUT /api/users/ai-consent
+     * Accept current AI consent terms.
+     */
+    @PutMapping("/ai-consent")
+    public ResponseEntity<?> acceptAiConsent(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody(required = false) Map<String, String> request) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = getOrCreateCurrentUser(principal);
+        String version = request != null ? request.get("version") : null;
+
+        try {
+            User updated = userService.acceptAiConsent(user.getId(), version);
+            return ResponseEntity.ok(Map.of(
+                    "accepted", true,
+                    "acceptedVersion", updated.getAiConsentVersion(),
+                    "acceptedAt", updated.getAiConsentAcceptedAt(),
+                    "currentVersion", userService.getCurrentAiConsentVersion()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * GET /api/users/{id}
      * Get user profile by id
      */
@@ -614,6 +664,9 @@ public class UserController {
             item.put("interestTags", user.getInterestTags());
             item.put("isOnline", user.getIsOnline());
             item.put("lastActive", user.getLastActive());
+            item.put("aiConsentAccepted", user.getAiConsentAccepted());
+            item.put("aiConsentVersion", user.getAiConsentVersion());
+            item.put("aiConsentAcceptedAt", user.getAiConsentAcceptedAt());
 
             String avatar = user.getAvatarUrl();
             item.put("avatarUrl", avatar != null ? fileStorageService.generatePresignedUrl(avatar) : null);

@@ -1,6 +1,8 @@
 package com.wherestrangersmeet.backend.controller;
 
 import com.wherestrangersmeet.backend.service.OpenAIService;
+import com.wherestrangersmeet.backend.service.UserService;
+import com.wherestrangersmeet.backend.model.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,15 +30,24 @@ public class VerificationController {
     @Autowired
     private OpenAIService openAIService;
 
+    @Autowired
+    private UserService userService;
+
     // IP Address -> List of timestamps
     private final Map<String, List<Instant>> requestCounts = new ConcurrentHashMap<>();
     private static final int MAX_REQUESTS_PER_HOUR = 30;
 
     @PostMapping("/photos")
     public ResponseEntity<Map<String, Object>> verifyPhotos(
+            @AuthenticationPrincipal FirebaseToken principal,
             @RequestParam("photo1") MultipartFile photo1,
             @RequestParam("photo2") MultipartFile photo2,
             HttpServletRequest request) {
+
+        ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
+        if (consentError != null) {
+            return consentError;
+        }
 
         log.info("Verification request received from IP: {}", request.getRemoteAddr());
         String clientIp = request.getRemoteAddr();
@@ -73,8 +84,14 @@ public class VerificationController {
     @PostMapping("/voice")
     public ResponseEntity<?> verifyVoice(
             HttpServletRequest request,
+            @AuthenticationPrincipal FirebaseToken principal,
             @RequestParam("audio") MultipartFile audio,
             @RequestParam("name") String name) {
+
+        ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
+        if (consentError != null) {
+            return consentError;
+        }
 
         log.info("Voice verification request received from IP: {}", request.getRemoteAddr());
         String clientIp = request.getRemoteAddr();
@@ -122,6 +139,11 @@ public class VerificationController {
 
         if (principal == null) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
+        if (consentError != null) {
+            return consentError;
         }
 
         log.info("Selfie verification request received from IP: {}", request.getRemoteAddr());
@@ -262,5 +284,27 @@ public class VerificationController {
             timestamps.add(now);
             return false;
         }
+    }
+
+    private ResponseEntity<Map<String, Object>> requireAiConsentIfAuthenticated(FirebaseToken principal) {
+        if (principal == null) {
+            return null;
+        }
+
+        User user = userService.createUserIfNew(
+                principal.getUid(),
+                principal.getEmail(),
+                principal.getName(),
+                principal.getPicture());
+
+        if (userService.hasAcceptedAiConsent(user.getId())) {
+            return null;
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("error", "AI_CONSENT_REQUIRED");
+        payload.put("message", "Please review and accept AI consent before using AI verification.");
+        payload.put("currentVersion", userService.getCurrentAiConsentVersion());
+        return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED).body(payload);
     }
 }

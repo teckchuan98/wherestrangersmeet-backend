@@ -1,6 +1,7 @@
 package com.wherestrangersmeet.backend.service;
 
 import com.wherestrangersmeet.backend.model.Message;
+import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -85,12 +86,46 @@ public class AsyncMessageProcessor {
             boolean isMomo = text.contains("@momo");
 
             if (isMomo) {
+                if (!hasAiConsent(message.getSenderId())) {
+                    notifyAiConsentRequired(message);
+                    return;
+                }
                 // Prevent infinite loops if AI somehow says @ai (unlikely but safe)
                 // Use brief mode
                 AiService.AiMode mode = AiService.AiMode.BRIEF;
                 handleAiTrigger(message, mode);
             }
         }
+    }
+
+    private boolean hasAiConsent(Long userId) {
+        return userRepository.findById(userId)
+                .map(this::hasCurrentAiConsent)
+                .orElse(false);
+    }
+
+    private boolean hasCurrentAiConsent(User user) {
+        return Boolean.TRUE.equals(user.getAiConsentAccepted())
+                && UserService.CURRENT_AI_CONSENT_VERSION.equals(user.getAiConsentVersion());
+    }
+
+    private void notifyAiConsentRequired(Message originalMessage) {
+        Message consentMessage = Message.builder()
+                .senderId(originalMessage.getSenderId())
+                .receiverId(originalMessage.getReceiverId())
+                .text("Please accept AI consent before using @momo.")
+                .messageType("AI_CONSENT_REQUIRED")
+                .createdAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")))
+                .build();
+
+        userRepository.findById(originalMessage.getSenderId()).ifPresent(sender -> {
+            if (sender.getFirebaseUid() != null) {
+                simpMessagingTemplate.convertAndSendToUser(
+                        sender.getFirebaseUid(),
+                        "/queue/messages",
+                        consentMessage);
+            }
+        });
     }
 
     private void handleAiTrigger(Message originalMessage, AiService.AiMode mode) {

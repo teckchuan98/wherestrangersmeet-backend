@@ -74,6 +74,15 @@ public class User {
     @Column(name = "voice_intro_url")
     private String voiceIntroUrl;
 
+    @Column(name = "ai_consent_accepted")
+    private Boolean aiConsentAccepted = false;
+
+    @Column(name = "ai_consent_version", length = 32)
+    private String aiConsentVersion;
+
+    @Column(name = "ai_consent_accepted_at")
+    private LocalDateTime aiConsentAcceptedAt;
+
     // Onboarding Fields
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
