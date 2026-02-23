@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -33,6 +34,12 @@ public class VerificationController {
     @Autowired
     private UserService userService;
 
+    @Value("${app.verification.photo.blocking:true}")
+    private boolean photoVerificationBlocking;
+
+    @Value("${app.verification.voice.blocking:true}")
+    private boolean voiceVerificationBlocking;
+
     // IP Address -> List of timestamps
     private final Map<String, List<Instant>> requestCounts = new ConcurrentHashMap<>();
     private static final int MAX_REQUESTS_PER_HOUR = 30;
@@ -44,15 +51,19 @@ public class VerificationController {
             @RequestParam("photo2") MultipartFile photo2,
             HttpServletRequest request) {
 
-        ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
-        if (consentError != null) {
-            return consentError;
+        if (photoVerificationBlocking) {
+            ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
+            if (consentError != null) {
+                return consentError;
+            }
+        } else {
+            log.warn("Photo verification is running in NON-BLOCKING mode.");
         }
 
         log.info("Verification request received from IP: {}", request.getRemoteAddr());
         String clientIp = request.getRemoteAddr();
 
-        if (isRateLimited(clientIp)) {
+        if (photoVerificationBlocking && isRateLimited(clientIp)) {
             log.warn("Rate limit exceeded for IP: {}", clientIp);
             return ResponseEntity.status(429)
                     .body(Map.of("message", "Too many verification attempts (" + MAX_REQUESTS_PER_HOUR
@@ -66,12 +77,22 @@ public class VerificationController {
 
             if (result == null) {
                 log.error("OpenAI Service returned null");
-                return ResponseEntity.internalServerError()
-                        .body(Map.of("message", "Internal Error: OpenAI Service returned null"));
+                if (!photoVerificationBlocking) {
+                    return ResponseEntity.ok(buildNonBlockingPhotoResponse(null, "OpenAI returned null result."));
+                }
+                return ResponseEntity.internalServerError().body(Map.of("message", "Internal Error: OpenAI Service returned null"));
             }
+
+            if (!photoVerificationBlocking) {
+                return ResponseEntity.ok(buildNonBlockingPhotoResponse(result, null));
+            }
+
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Verification failed: {}", e.getMessage(), e);
+            if (!photoVerificationBlocking) {
+                return ResponseEntity.ok(buildNonBlockingPhotoResponse(null, "Verification service error: " + e.getClass().getSimpleName()));
+            }
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "Verification failed: " + e.getMessage()));
         }
@@ -88,15 +109,19 @@ public class VerificationController {
             @RequestParam("audio") MultipartFile audio,
             @RequestParam("name") String name) {
 
-        ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
-        if (consentError != null) {
-            return consentError;
+        if (voiceVerificationBlocking) {
+            ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
+            if (consentError != null) {
+                return consentError;
+            }
+        } else {
+            log.warn("Voice verification is running in NON-BLOCKING mode.");
         }
 
         log.info("Voice verification request received from IP: {}", request.getRemoteAddr());
         String clientIp = request.getRemoteAddr();
 
-        if (isRateLimited(clientIp)) {
+        if (voiceVerificationBlocking && isRateLimited(clientIp)) {
             log.warn("Rate limit exceeded for IP: {}", clientIp);
             return ResponseEntity.status(429)
                     .body(Map.of("message", "Too many verification attempts. Please try again later."));
@@ -111,6 +136,10 @@ public class VerificationController {
             // 2. Normalize and Compare
             boolean isValid = verifyTranscript(transcript, name);
 
+            if (!voiceVerificationBlocking) {
+                return ResponseEntity.ok(buildNonBlockingVoiceResponse(transcript, isValid, null));
+            }
+
             Map<String, Object> response = new HashMap<>();
             response.put("valid", isValid);
             response.put("transcript", transcript);
@@ -122,9 +151,41 @@ public class VerificationController {
 
         } catch (Exception e) {
             log.error("Voice verification failed", e);
+            if (!voiceVerificationBlocking) {
+                return ResponseEntity.ok(buildNonBlockingVoiceResponse(null, false, "Voice verification service error: " + e.getClass().getSimpleName()));
+            }
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private Map<String, Object> buildNonBlockingPhotoResponse(Map<String, Object> aiResult, String bypassReason) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("valid", true);
+        response.put("facesVisible", true);
+        response.put("samePerson", true);
+        response.put("message", "Photo verification is temporarily non-blocking.");
+        response.put("enforced", false);
+        if (aiResult != null) {
+            response.put("raw", aiResult);
+        }
+        if (bypassReason != null && !bypassReason.isBlank()) {
+            response.put("bypassReason", bypassReason);
+        }
+        return response;
+    }
+
+    private Map<String, Object> buildNonBlockingVoiceResponse(String transcript, boolean rawValid, String bypassReason) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("valid", true);
+        response.put("message", "Voice verification is temporarily non-blocking.");
+        response.put("enforced", false);
+        response.put("rawValid", rawValid);
+        response.put("transcript", transcript != null ? transcript : "");
+        if (bypassReason != null && !bypassReason.isBlank()) {
+            response.put("bypassReason", bypassReason);
+        }
+        return response;
     }
 
     /**
