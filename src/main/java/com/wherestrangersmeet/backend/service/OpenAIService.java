@@ -178,25 +178,7 @@ public class OpenAIService {
             log.info("OpenAI Status: " + response.getStatusCode());
             log.info("OpenAI Response Body: " + response.getBody());
 
-            JsonNode root = objectMapper.readTree(response.getBody());
-
-            // Check if choices array exists and has elements
-            if (!root.has("choices") || root.path("choices").size() == 0) {
-                log.error("OpenAI response has no choices!");
-                Map<String, Object> error = new HashMap<>();
-                error.put("valid", false);
-                error.put("message", "OpenAI returned empty response");
-                return error;
-            }
-
-            String contentString = root.path("choices").get(0).path("message").path("content").asText();
-            log.info("OpenAI Raw Content: " + contentString);
-
-            // Extract JSON from response (handles markdown code blocks and extra text)
-            String jsonString = extractJson(contentString);
-            log.info("Extracted JSON: " + jsonString);
-
-            return objectMapper.readValue(jsonString, Map.class);
+            return parseVerificationResult(response.getBody(), "photo verification");
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             // HTTP 4xx errors (bad request, unauthorized, rate limit, etc.)
             log.error("OpenAI HTTP Client Error: " + e.getStatusCode());
@@ -294,25 +276,7 @@ public class OpenAIService {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
             log.info("OpenAI Status: " + response.getStatusCode());
 
-            JsonNode root = objectMapper.readTree(response.getBody());
-
-            // Check if choices array exists and has elements
-            if (!root.has("choices") || root.path("choices").size() == 0) {
-                log.error("OpenAI response has no choices!");
-                Map<String, Object> error = new HashMap<>();
-                error.put("valid", false);
-                error.put("message", "OpenAI returned empty response");
-                return error;
-            }
-
-            String contentString = root.path("choices").get(0).path("message").path("content").asText();
-            log.info("OpenAI Raw Content: " + contentString);
-
-            // Extract JSON from response (handles markdown code blocks and extra text)
-            String jsonString = extractJson(contentString);
-            log.info("Extracted JSON: " + jsonString);
-
-            return objectMapper.readValue(jsonString, Map.class);
+            return parseVerificationResult(response.getBody(), "photo URL verification");
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             log.error("OpenAI HTTP Client Error: " + e.getStatusCode());
             log.error("Response Body: " + e.getResponseBodyAsString());
@@ -455,18 +419,7 @@ public class OpenAIService {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
             log.info("OpenAI Keep-Alive Response: " + response.getStatusCode()); // Logging status
 
-            JsonNode root = objectMapper.readTree(response.getBody());
-
-            if (!root.has("choices") || root.path("choices").size() == 0) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("valid", false);
-                error.put("message", "OpenAI returned empty response");
-                return error;
-            }
-
-            String contentString = root.path("choices").get(0).path("message").path("content").asText();
-            String jsonString = extractJson(contentString);
-            return objectMapper.readValue(jsonString, Map.class);
+            return parseVerificationResult(response.getBody(), "base64 photo verification");
         } catch (Exception e) {
             log.error("Error verifying photo (Base64): {}", e.getMessage(), e);
             Map<String, Object> error = new HashMap<>();
@@ -474,6 +427,60 @@ public class OpenAIService {
             error.put("message", "Error verifying photo: " + e.getMessage());
             return error;
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseVerificationResult(String responseBody, String context) {
+        try {
+            if (responseBody == null || responseBody.isBlank()) {
+                return errorResult("OpenAI returned empty response body for " + context);
+            }
+
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                return errorResult("OpenAI returned no choices for " + context);
+            }
+
+            JsonNode contentNode = choices.get(0).path("message").path("content");
+            String contentString = contentNode.isTextual() ? contentNode.asText() : contentNode.toString();
+            if (contentString == null || contentString.isBlank() || "null".equalsIgnoreCase(contentString.trim())) {
+                return errorResult("OpenAI returned null/empty content for " + context);
+            }
+            log.info("OpenAI Raw Content: {}", contentString);
+
+            String jsonString = extractJson(contentString);
+            if (jsonString == null || jsonString.isBlank() || "null".equalsIgnoreCase(jsonString.trim())) {
+                return errorResult("Could not extract JSON content for " + context);
+            }
+            log.info("Extracted JSON: {}", jsonString);
+
+            JsonNode parsedNode = objectMapper.readTree(jsonString);
+            if (!parsedNode.isObject()) {
+                return errorResult("Extracted JSON is not an object for " + context);
+            }
+
+            Map<String, Object> result = objectMapper.convertValue(parsedNode, Map.class);
+            if (result == null) {
+                return errorResult("Parsed JSON object is null for " + context);
+            }
+
+            // Normalize face visibility key variants from model output.
+            if (!result.containsKey("facesVisible") && result.containsKey("faceVisible")) {
+                result.put("facesVisible", result.get("faceVisible"));
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("Failed parsing OpenAI response for {}: {}", context, e.getMessage(), e);
+            return errorResult("Failed to parse OpenAI response for " + context);
+        }
+    }
+
+    private Map<String, Object> errorResult(String message) {
+        Map<String, Object> error = new HashMap<>();
+        error.put("valid", false);
+        error.put("message", message);
+        return error;
     }
 
     public String transcribeAudio(MultipartFile audioFile) throws IOException {

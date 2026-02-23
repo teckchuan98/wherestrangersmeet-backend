@@ -225,6 +225,13 @@ public class VerificationController {
                     mimeType,
                     java.util.Collections.emptyList()
             );
+            if (aiResult == null) {
+                log.warn("Selfie verification returned null AI result");
+                return ResponseEntity.ok(Map.of(
+                        "valid", false,
+                        "message", "Verification service returned empty result. Please retry."
+                ));
+            }
 
             boolean valid = false;
             Object validObj = aiResult.get("valid");
