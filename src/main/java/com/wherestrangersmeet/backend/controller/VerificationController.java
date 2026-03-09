@@ -47,12 +47,13 @@ public class VerificationController {
     @PostMapping("/photos")
     public ResponseEntity<Map<String, Object>> verifyPhotos(
             @AuthenticationPrincipal FirebaseToken principal,
+            @RequestParam(name = "aiConsentAccepted", required = false) Boolean aiConsentAccepted,
             @RequestParam("photo1") MultipartFile photo1,
             @RequestParam("photo2") MultipartFile photo2,
             HttpServletRequest request) {
 
         if (photoVerificationBlocking) {
-            ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
+            ResponseEntity<Map<String, Object>> consentError = requireAiConsent(principal, aiConsentAccepted);
             if (consentError != null) {
                 return consentError;
             }
@@ -106,11 +107,12 @@ public class VerificationController {
     public ResponseEntity<?> verifyVoice(
             HttpServletRequest request,
             @AuthenticationPrincipal FirebaseToken principal,
+            @RequestParam(name = "aiConsentAccepted", required = false) Boolean aiConsentAccepted,
             @RequestParam("audio") MultipartFile audio,
             @RequestParam("name") String name) {
 
         if (voiceVerificationBlocking) {
-            ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
+            ResponseEntity<Map<String, Object>> consentError = requireAiConsent(principal, aiConsentAccepted);
             if (consentError != null) {
                 return consentError;
             }
@@ -202,7 +204,7 @@ public class VerificationController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        ResponseEntity<Map<String, Object>> consentError = requireAiConsentIfAuthenticated(principal);
+        ResponseEntity<Map<String, Object>> consentError = requireAiConsent(principal, true);
         if (consentError != null) {
             return consentError;
         }
@@ -354,9 +356,19 @@ public class VerificationController {
         }
     }
 
-    private ResponseEntity<Map<String, Object>> requireAiConsentIfAuthenticated(FirebaseToken principal) {
+    private ResponseEntity<Map<String, Object>> requireAiConsent(
+            FirebaseToken principal,
+            Boolean aiConsentAccepted) {
         if (principal == null) {
-            return null;
+            if (Boolean.TRUE.equals(aiConsentAccepted)) {
+                return null;
+            }
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("error", "AI_CONSENT_REQUIRED");
+            payload.put("message", "Please review and accept AI consent before using AI verification.");
+            payload.put("currentVersion", userService.getCurrentAiConsentVersion());
+            return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED).body(payload);
         }
 
         User user = userService.createUserIfNew(
