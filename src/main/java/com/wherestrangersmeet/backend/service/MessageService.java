@@ -25,6 +25,7 @@ public class MessageService {
     private final org.springframework.messaging.simp.SimpMessagingTemplate simpMessagingTemplate;
     private final SelfieExchangeRepository selfieExchangeRepository;
     private final UserReportRepository userReportRepository;
+    private final TextModerationService textModerationService;
     // Note: NotificationService logic moved to AsyncMessageProcessor
 
     // ORCHESTRATOR: Not Transactional (to avoid long-running DB connections)
@@ -36,6 +37,7 @@ public class MessageService {
     public Message sendMessage(Long senderId, Long receiverId, String text, String messageType, String attachmentUrl,
             Long replyToId, String attachmentHash, boolean broadcast) {
         ensureNotBlocked(senderId, receiverId);
+        ensureTextAllowed(text, messageType);
 
         // 1. SYNC: Save to DB (Fast, Ordered)
         Message savedMessage = saveMessageToDb(senderId, receiverId, text, messageType, attachmentUrl, replyToId,
@@ -235,6 +237,16 @@ public class MessageService {
     private void ensureNotBlocked(Long senderId, Long receiverId) {
         if (isUserPairBlocked(senderId, receiverId)) {
             throw new IllegalStateException("Cannot message a blocked user");
+        }
+    }
+
+    private void ensureTextAllowed(String text, String messageType) {
+        if (!"TEXT".equalsIgnoreCase(messageType)) {
+            return;
+        }
+
+        if (textModerationService.containsBlockedContent(text)) {
+            throw new IllegalArgumentException("Message contains content that is not allowed");
         }
     }
 

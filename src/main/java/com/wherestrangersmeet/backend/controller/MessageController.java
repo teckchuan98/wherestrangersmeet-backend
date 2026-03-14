@@ -63,6 +63,14 @@ public class MessageController {
             Message message = messageService.sendMessage(sender.getId(), receiverId, text, messageType, attachmentUrl,
                     replyToId, attachmentHash);
             return ResponseEntity.ok(message);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Message.builder()
+                            .text(e.getMessage())
+                            .messageType("MODERATION_BLOCKED")
+                            .senderId(sender.getId())
+                            .receiverId(receiverId)
+                            .build());
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
@@ -136,6 +144,9 @@ public class MessageController {
             try {
                 savedMessage = messageService.sendMessage(senderId, receiverId, text, messageType,
                         attachmentUrl, replyToId, attachmentHash, false);
+            } catch (IllegalArgumentException e) {
+                log.warn("🚫 Message blocked by text moderation for sender {}", senderId);
+                return;
             } catch (IllegalStateException e) {
                 log.warn("🚫 Message blocked between users {} and {}", senderId, receiverId);
                 return;
