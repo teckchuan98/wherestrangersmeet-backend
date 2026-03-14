@@ -15,6 +15,7 @@ import org.hibernate.Hibernate;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 import java.util.Optional;
 import java.util.List;
@@ -42,6 +43,7 @@ public class UserService {
     private final OpenAIService openAIService;
     private final SimpMessagingTemplate messagingTemplate;
     private final UserCache userCache;
+    private final BannedEmailService bannedEmailService;
 
     public Optional<User> getUserByFirebaseUid(String firebaseUid) {
         return userRepository.findByFirebaseUid(firebaseUid).map(this::ensurePublicId);
@@ -69,6 +71,8 @@ public class UserService {
 
     @Transactional
     public User createUserIfNew(String firebaseUid, String email, String name, String avatarUrl) {
+        String normalizedEmail = normalizeEmail(email);
+
         // First check by Firebase UID
         Optional<User> existing = userRepository.findByFirebaseUid(firebaseUid);
         if (existing.isPresent()) {
@@ -81,8 +85,10 @@ public class UserService {
             return user;
         }
 
+        bannedEmailService.ensureNotBanned(normalizedEmail);
+
         // Check by email to link accounts
-        Optional<User> existingByEmail = userRepository.findByEmail(email);
+        Optional<User> existingByEmail = userRepository.findByEmail(normalizedEmail);
         if (existingByEmail.isPresent()) {
             log.info("User exists with email, linking Firebase UID: {}", firebaseUid);
             User user = existingByEmail.get();
@@ -99,11 +105,11 @@ public class UserService {
         try {
             User user = new User();
             user.setFirebaseUid(firebaseUid);
-            user.setEmail(email);
-            user.setName(name != null ? name : email.split("@")[0]);
+            user.setEmail(normalizedEmail);
+            user.setName(name != null ? name : normalizedEmail.split("@")[0]);
             user.setAvatarUrl(avatarUrl);
             user.setPublicId(generateUniquePublicId());
-            log.info("Creating new user: {}", email);
+            log.info("Creating new user: {}", normalizedEmail);
             return saveUser(user);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // Race condition: another thread just created this user
@@ -115,7 +121,7 @@ public class UserService {
                 return ensurePublicId(existing.get());
             }
 
-            existingByEmail = userRepository.findByEmail(email);
+            existingByEmail = userRepository.findByEmail(normalizedEmail);
             if (existingByEmail.isPresent()) {
                 return ensurePublicId(existingByEmail.get());
             }
@@ -566,5 +572,12 @@ public class UserService {
     private boolean hasAcceptedAiConsent(User user) {
         return Boolean.TRUE.equals(user.getAiConsentAccepted())
                 && CURRENT_AI_CONSENT_VERSION.equals(user.getAiConsentVersion());
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

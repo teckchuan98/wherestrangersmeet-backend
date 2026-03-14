@@ -22,16 +22,19 @@ public class AdminModerationService {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final UserService userService;
+    private final BannedEmailService bannedEmailService;
 
     public AdminModerationService(
             UserReportRepository userReportRepository,
             MessageRepository messageRepository,
             UserRepository userRepository,
-            UserService userService) {
+            UserService userService,
+            BannedEmailService bannedEmailService) {
         this.userReportRepository = userReportRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.userService = userService;
+        this.bannedEmailService = bannedEmailService;
     }
 
     @Transactional(readOnly = true)
@@ -59,6 +62,10 @@ public class AdminModerationService {
                 .orElseThrow(() -> new IllegalArgumentException("Reported user not found"));
 
         if (reportedUser.getDeletedAt() == null) {
+            bannedEmailService.ban(
+                    reportedUser.getEmail(),
+                    reportedUser.getId(),
+                    "Admin moderation eject from report #" + reportId);
             userService.deleteUser(reportedUser.getId());
         }
     }
