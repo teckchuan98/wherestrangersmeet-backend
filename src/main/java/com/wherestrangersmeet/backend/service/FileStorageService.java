@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.S3Client;
 
 import java.time.Duration;
@@ -162,5 +163,30 @@ public class FileStorageService {
     public String getPublicUrl(String key) {
         // Return the key directly; the Controller will convert it to a Presigned URL
         return key;
+    }
+
+    public void deleteFile(String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+
+        String cleanKey = key;
+        if (key.startsWith("http")) {
+            if (key.contains("message-media/")) {
+                cleanKey = key.substring(key.indexOf("message-media/"));
+            } else if (key.contains("user-photos/")) {
+                cleanKey = key.substring(key.indexOf("user-photos/"));
+            } else {
+                return;
+            }
+            if (cleanKey.contains("?")) {
+                cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
+            }
+        }
+
+        s3Client.deleteObject(DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(cleanKey)
+                .build());
     }
 }
