@@ -13,7 +13,7 @@ public class WebConfig implements WebMvcConfigurer {
     private final String[] allowedOrigins;
 
     public WebConfig(
-            @Value("${app.web.allowed-origins:http://localhost:3000,http://127.0.0.1:3000,https://tteckchuan.dev,https://www.tteckchuan.dev}") String allowedOrigins) {
+            @Value("${app.web.allowed-origins:http://localhost:3000,http://127.0.0.1:3000,https://tteckchuan.dev,https://www.tteckchuan.dev,http://matchey.my,https://matchey.my,https://www.matchey.my}") String allowedOrigins) {
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
