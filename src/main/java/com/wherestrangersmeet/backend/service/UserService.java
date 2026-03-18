@@ -33,6 +33,7 @@ public class UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
     public static final String CURRENT_AI_CONSENT_VERSION = "2026-02-19";
+    public static final String CURRENT_MOMO_CONSENT_VERSION = "2026-03-18";
     private static final char[] PUBLIC_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789".toCharArray();
     private static final int PUBLIC_ID_LENGTH = 6;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -549,6 +550,18 @@ public class UserService {
         return CURRENT_AI_CONSENT_VERSION;
     }
 
+    @Transactional(readOnly = true)
+    public boolean hasAcceptedMomoConsent(Long userId) {
+        return userRepository.findById(userId)
+                .map(this::hasAcceptedMomoConsent)
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public String getCurrentMomoConsentVersion() {
+        return CURRENT_MOMO_CONSENT_VERSION;
+    }
+
     @Transactional
     public User acceptAiConsent(Long userId, String requestedVersion) {
         User user = userRepository.findById(userId)
@@ -569,9 +582,34 @@ public class UserService {
         return saveUser(user);
     }
 
+    @Transactional
+    public User acceptMomoConsent(Long userId, String requestedVersion) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
+
+        String acceptedVersion = (requestedVersion == null || requestedVersion.isBlank())
+                ? CURRENT_MOMO_CONSENT_VERSION
+                : requestedVersion.trim();
+
+        if (!CURRENT_MOMO_CONSENT_VERSION.equals(acceptedVersion)) {
+            throw new IllegalArgumentException("Unsupported MOMO consent version");
+        }
+
+        user.setMomoConsentAccepted(true);
+        user.setMomoConsentVersion(acceptedVersion);
+        user.setMomoConsentAcceptedAt(LocalDateTime.now());
+        return saveUser(user);
+    }
+
     private boolean hasAcceptedAiConsent(User user) {
         return Boolean.TRUE.equals(user.getAiConsentAccepted())
                 && CURRENT_AI_CONSENT_VERSION.equals(user.getAiConsentVersion());
+    }
+
+    private boolean hasAcceptedMomoConsent(User user) {
+        return Boolean.TRUE.equals(user.getMomoConsentAccepted())
+                && CURRENT_MOMO_CONSENT_VERSION.equals(user.getMomoConsentVersion());
     }
 
     private String normalizeEmail(String email) {

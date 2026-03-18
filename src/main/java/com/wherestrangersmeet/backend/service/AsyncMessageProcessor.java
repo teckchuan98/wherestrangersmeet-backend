@@ -90,6 +90,10 @@ public class AsyncMessageProcessor {
                     notifyAiConsentRequired(message);
                     return;
                 }
+                if (!hasMomoConsent(message.getSenderId())) {
+                    notifyMomoConsentRequired(message);
+                    return;
+                }
                 // Prevent infinite loops if AI somehow says @ai (unlikely but safe)
                 // Use brief mode
                 AiService.AiMode mode = AiService.AiMode.BRIEF;
@@ -109,12 +113,42 @@ public class AsyncMessageProcessor {
                 && UserService.CURRENT_AI_CONSENT_VERSION.equals(user.getAiConsentVersion());
     }
 
+    private boolean hasMomoConsent(Long userId) {
+        return userRepository.findById(userId)
+                .map(this::hasCurrentMomoConsent)
+                .orElse(false);
+    }
+
+    private boolean hasCurrentMomoConsent(User user) {
+        return Boolean.TRUE.equals(user.getMomoConsentAccepted())
+                && UserService.CURRENT_MOMO_CONSENT_VERSION.equals(user.getMomoConsentVersion());
+    }
+
     private void notifyAiConsentRequired(Message originalMessage) {
         Message consentMessage = Message.builder()
                 .senderId(originalMessage.getSenderId())
                 .receiverId(originalMessage.getReceiverId())
                 .text("Please accept AI consent before using @momo.")
                 .messageType("AI_CONSENT_REQUIRED")
+                .createdAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")))
+                .build();
+
+        userRepository.findById(originalMessage.getSenderId()).ifPresent(sender -> {
+            if (sender.getFirebaseUid() != null) {
+                simpMessagingTemplate.convertAndSendToUser(
+                        sender.getFirebaseUid(),
+                        "/queue/messages",
+                        consentMessage);
+            }
+        });
+    }
+
+    private void notifyMomoConsentRequired(Message originalMessage) {
+        Message consentMessage = Message.builder()
+                .senderId(originalMessage.getSenderId())
+                .receiverId(originalMessage.getReceiverId())
+                .text("Please review and accept the MOMO AI first-use warning before using @momo.")
+                .messageType("MOMO_CONSENT_REQUIRED")
                 .createdAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")))
                 .build();
 

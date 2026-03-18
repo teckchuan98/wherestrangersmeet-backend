@@ -83,6 +83,15 @@ public class User {
     @Column(name = "ai_consent_accepted_at")
     private LocalDateTime aiConsentAcceptedAt;
 
+    @Column(name = "momo_consent_accepted")
+    private Boolean momoConsentAccepted = false;
+
+    @Column(name = "momo_consent_version", length = 32)
+    private String momoConsentVersion;
+
+    @Column(name = "momo_consent_accepted_at")
+    private LocalDateTime momoConsentAcceptedAt;
+
     // Onboarding Fields
     @Enumerated(EnumType.STRING)
     @Column(length = 20)

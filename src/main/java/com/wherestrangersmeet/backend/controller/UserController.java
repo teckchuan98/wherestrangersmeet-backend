@@ -202,6 +202,48 @@ public class UserController {
         }
     }
 
+    @GetMapping("/momo-consent")
+    public ResponseEntity<?> getMomoConsentStatus(@AuthenticationPrincipal FirebaseToken principal) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = getOrCreateCurrentUser(principal);
+        boolean accepted = userService.hasAcceptedMomoConsent(user.getId());
+
+        return ResponseEntity.ok(Map.of(
+                "accepted", accepted,
+                "acceptedVersion", user.getMomoConsentVersion(),
+                "acceptedAt", user.getMomoConsentAcceptedAt(),
+                "currentVersion", userService.getCurrentMomoConsentVersion()));
+    }
+
+    @PutMapping("/momo-consent")
+    public ResponseEntity<?> acceptMomoConsent(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody(required = false) Map<String, String> request) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = getOrCreateCurrentUser(principal);
+        String version = request != null ? request.get("version") : null;
+
+        try {
+            User updated = userService.acceptMomoConsent(user.getId(), version);
+            return ResponseEntity.ok(Map.of(
+                    "accepted", true,
+                    "acceptedVersion", updated.getMomoConsentVersion(),
+                    "acceptedAt", updated.getMomoConsentAcceptedAt(),
+                    "currentVersion", userService.getCurrentMomoConsentVersion()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     /**
      * GET /api/users/{id}
      * Get user profile by id
