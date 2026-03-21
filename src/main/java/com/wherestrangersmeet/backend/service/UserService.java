@@ -54,6 +54,14 @@ public class UserService {
         return userRepository.findById(id).map(this::ensurePublicId);
     }
 
+    public Optional<User> getUserByPublicId(String publicId) {
+        String normalized = normalizePublicId(publicId);
+        if (normalized == null) {
+            return Optional.empty();
+        }
+        return userRepository.findByPublicId(normalized).map(this::ensurePublicId);
+    }
+
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
@@ -184,6 +192,15 @@ public class UserService {
             return saveUser(user);
         }
         return user;
+    }
+
+    @Transactional
+    public User updateHidden(Long id, boolean hidden) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
+        user.setHidden(hidden);
+        return saveUser(user);
     }
 
     @Transactional
@@ -617,5 +634,17 @@ public class UserService {
             return null;
         }
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizePublicId(String publicId) {
+        if (publicId == null || publicId.isBlank()) {
+            return null;
+        }
+
+        String normalized = publicId.trim().toLowerCase(Locale.ROOT);
+        if (!normalized.startsWith("#")) {
+            normalized = "#" + normalized;
+        }
+        return normalized;
     }
 }

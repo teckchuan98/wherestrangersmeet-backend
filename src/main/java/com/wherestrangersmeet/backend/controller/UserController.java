@@ -411,6 +411,30 @@ public class UserController {
     }
 
     /**
+     * PUT /api/users/hidden
+     * Update whether the current user is hidden from the feed
+     */
+    @PutMapping("/hidden")
+    public ResponseEntity<?> updateHidden(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody Map<String, Boolean> request) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = getOrCreateCurrentUser(principal);
+        Boolean hidden = request.get("hidden");
+        if (hidden == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "hidden is required"));
+        }
+
+        User updatedUser = userService.updateHidden(user.getId(), hidden);
+        return ResponseEntity.ok(updatedUser);
+    }
+
+    /**
      * POST /api/users/voice-intro
      * Upload and update user's voice intro
      */
@@ -705,6 +729,7 @@ public class UserController {
             item.put("occupationDescription", user.getOccupationDescription());
             item.put("interestTags", user.getInterestTags());
             item.put("isOnline", user.getIsOnline());
+            item.put("hidden", user.getHidden());
             item.put("lastActive", user.getLastActive());
             item.put("aiConsentAccepted", user.getAiConsentAccepted());
             item.put("aiConsentVersion", user.getAiConsentVersion());

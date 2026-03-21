@@ -170,6 +170,28 @@ public class MessageService {
         return conversations;
     }
 
+    @Transactional(readOnly = true)
+    public User findChatPartnerByPublicId(Long currentUserId, String publicId) {
+        if (publicId == null || publicId.isBlank()) {
+            throw new IllegalArgumentException("publicId is required");
+        }
+
+        String normalized = publicId.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!normalized.startsWith("#")) {
+            normalized = "#" + normalized;
+        }
+
+        User partner = userRepository.findByPublicId(normalized)
+                .orElseThrow(() -> new NoSuchElementException("User not found"));
+
+        if (partner.getId().equals(currentUserId)) {
+            throw new IllegalArgumentException("You cannot start a conversation with yourself");
+        }
+
+        ensureNotBlocked(currentUserId, partner.getId());
+        return partner;
+    }
+
     @Transactional
     public void markAsRead(Long receiverId, Long senderId) {
         List<Message> unreadMessages = messageRepository.findBySenderIdAndReceiverIdAndIsReadFalse(senderId,

@@ -65,6 +65,9 @@ public class User {
     @Column(name = "is_online")
     private Boolean isOnline = false;
 
+    @Column(name = "hidden", nullable = false)
+    private Boolean hidden = false;
+
     @Column(name = "last_active")
     private LocalDateTime lastActive;
 

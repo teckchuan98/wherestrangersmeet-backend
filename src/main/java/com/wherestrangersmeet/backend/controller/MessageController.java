@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/api/messages")
@@ -277,6 +278,47 @@ public class MessageController {
 
         List<Map<String, Object>> conversations = messageService.getConversations(currentUser.getId());
         return ResponseEntity.ok(conversations);
+    }
+
+    @GetMapping("/lookup")
+    public ResponseEntity<?> findUserByPublicId(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestParam String publicId) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        User currentUser = userService.getUserByFirebaseUid(principal.getUid())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        try {
+            User partner = messageService.findChatPartnerByPublicId(currentUser.getId(), publicId);
+
+            if (partner.getAvatarUrl() != null) {
+                partner.setAvatarUrl(fileStorageService.generatePresignedUrl(partner.getAvatarUrl()));
+            }
+
+            if (partner.getPhotos() != null) {
+                partner.getPhotos().parallelStream().forEach(photo -> {
+                    if (photo.getUrl() != null) {
+                        photo.setUrl(fileStorageService.generatePresignedUrl(photo.getUrl()));
+                    }
+                });
+            }
+
+            if (partner.getVoiceIntroUrl() != null) {
+                partner.setVoiceIntroUrl(fileStorageService.generatePresignedUrl(partner.getVoiceIntroUrl()));
+            }
+
+            return ResponseEntity.ok(partner);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PutMapping("/mark-read/{senderId}")
