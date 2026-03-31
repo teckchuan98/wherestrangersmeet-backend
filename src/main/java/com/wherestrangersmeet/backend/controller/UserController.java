@@ -4,6 +4,7 @@ import com.google.firebase.auth.FirebaseToken;
 import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.service.FileStorageService;
 import com.wherestrangersmeet.backend.service.MediaFileService;
+import com.wherestrangersmeet.backend.service.DailyPromptService;
 import com.wherestrangersmeet.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -29,6 +30,7 @@ public class UserController {
     private final UserService userService;
     private final FileStorageService fileStorageService;
     private final MediaFileService mediaFileService;
+    private final DailyPromptService dailyPromptService;
 
     private User getOrCreateCurrentUser(FirebaseToken principal) {
         if (principal == null) {
@@ -106,6 +108,7 @@ public class UserController {
                 user.setVoiceIntroUrl(fileStorageService.generatePresignedUrl(user.getVoiceIntroUrl()));
             }
         });
+        dailyPromptService.attachTodayPromptState(users);
 
         return ResponseEntity.ok(users);
     }
@@ -171,6 +174,7 @@ public class UserController {
             }
             user.setStickerKeys(presignedStickers);
         }
+        dailyPromptService.attachTodayPromptState(user);
 
         // System.out.println("========================================");
 
@@ -396,6 +400,8 @@ public class UserController {
             String presigned = fileStorageService.generatePresignedUrl(user.getVoiceIntroUrl());
             user.setVoiceIntroUrl(presigned);
         }
+
+        dailyPromptService.attachTodayPromptState(user);
 
         return ResponseEntity.ok(user);
     }

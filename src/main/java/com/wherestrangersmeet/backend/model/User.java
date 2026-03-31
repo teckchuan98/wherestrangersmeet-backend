@@ -4,9 +4,11 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -143,4 +145,27 @@ public class User {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @Transient
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Long todayPromptId;
+
+    @Transient
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private LocalDate todayPromptDate;
+
+    @Transient
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String todayPromptText;
+
+    @Transient
+    private Boolean todayPromptAnswered = false;
+
+    @Transient
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String todayPromptAnswer;
+
+    @Transient
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private LocalDateTime todayPromptAnsweredAt;
 }

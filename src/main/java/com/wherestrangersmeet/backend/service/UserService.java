@@ -46,6 +46,7 @@ public class UserService {
     private final SimpMessagingTemplate messagingTemplate;
     private final UserCache userCache;
     private final BannedEmailService bannedEmailService;
+    private final DailyPromptService dailyPromptService;
 
     public Optional<User> getUserByFirebaseUid(String firebaseUid) {
         return userRepository.findByFirebaseUid(firebaseUid).map(this::ensurePublicId);
@@ -69,14 +70,19 @@ public class UserService {
 
     public org.springframework.data.domain.Page<User> getFeedUsers(String currentUid, int page, int size) {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        java.time.LocalDate activeDate = dailyPromptService.today();
         Optional<User> currentUser = userRepository.findByFirebaseUid(currentUid);
         if (currentUser.isPresent()) {
             Set<Long> excludedUserIds = getBlockedRelationshipUserIds(currentUser.get().getId());
             if (!excludedUserIds.isEmpty()) {
-                return userRepository.findFeedUsersExcludingIds(currentUid, new ArrayList<>(excludedUserIds), pageable);
+                return userRepository.findFeedUsersExcludingIds(
+                        currentUid,
+                        new ArrayList<>(excludedUserIds),
+                        activeDate,
+                        pageable);
             }
         }
-        return userRepository.findByFirebaseUidNotAndPhotosIsNotEmpty(currentUid, pageable);
+        return userRepository.findByFirebaseUidNotAndPhotosIsNotEmpty(currentUid, activeDate, pageable);
     }
 
     @Transactional

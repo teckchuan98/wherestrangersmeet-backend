@@ -29,26 +29,69 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByPublicId(String publicId);
 
     // Pagination support: find users who are NOT the current user AND have at least one photo
-    @Query("""
-            SELECT u FROM User u
-            WHERE u.firebaseUid <> :firebaseUid
-              AND SIZE(u.photos) > 0
-              AND u.deletedAt IS NULL
+    @Query(value = """
+            SELECT *
+            FROM users u
+            WHERE u.firebase_uid <> :firebaseUid
+              AND EXISTS (SELECT 1 FROM user_photos up WHERE up.user_id = u.id)
+              AND u.deleted_at IS NULL
               AND u.hidden = false
-            """)
-    Page<User> findByFirebaseUidNotAndPhotosIsNotEmpty(@Param("firebaseUid") String firebaseUid, Pageable pageable);
+            ORDER BY CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM daily_prompt_responses dpr
+                    JOIN daily_prompts dp ON dp.id = dpr.daily_prompt_id
+                    WHERE dpr.user_id = u.id
+                      AND dp.active_date = :activeDate
+                ) THEN 0
+                ELSE 1
+            END,
+            u.id DESC
+            """, countQuery = """
+            SELECT COUNT(*)
+            FROM users u
+            WHERE u.firebase_uid <> :firebaseUid
+              AND EXISTS (SELECT 1 FROM user_photos up WHERE up.user_id = u.id)
+              AND u.deleted_at IS NULL
+              AND u.hidden = false
+            """, nativeQuery = true)
+    Page<User> findByFirebaseUidNotAndPhotosIsNotEmpty(
+            @Param("firebaseUid") String firebaseUid,
+            @Param("activeDate") java.time.LocalDate activeDate,
+            Pageable pageable);
 
-    @Query("""
-            SELECT u FROM User u
-            WHERE u.firebaseUid <> :firebaseUid
-              AND SIZE(u.photos) > 0
-              AND u.deletedAt IS NULL
+    @Query(value = """
+            SELECT *
+            FROM users u
+            WHERE u.firebase_uid <> :firebaseUid
+              AND EXISTS (SELECT 1 FROM user_photos up WHERE up.user_id = u.id)
+              AND u.deleted_at IS NULL
               AND u.hidden = false
               AND u.id NOT IN :excludedIds
-            """)
+            ORDER BY CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM daily_prompt_responses dpr
+                    JOIN daily_prompts dp ON dp.id = dpr.daily_prompt_id
+                    WHERE dpr.user_id = u.id
+                      AND dp.active_date = :activeDate
+                ) THEN 0
+                ELSE 1
+            END,
+            u.id DESC
+            """, countQuery = """
+            SELECT COUNT(*)
+            FROM users u
+            WHERE u.firebase_uid <> :firebaseUid
+              AND EXISTS (SELECT 1 FROM user_photos up WHERE up.user_id = u.id)
+              AND u.deleted_at IS NULL
+              AND u.hidden = false
+              AND u.id NOT IN :excludedIds
+            """, nativeQuery = true)
     Page<User> findFeedUsersExcludingIds(
             @Param("firebaseUid") String firebaseUid,
             @Param("excludedIds") List<Long> excludedIds,
+            @Param("activeDate") java.time.LocalDate activeDate,
             Pageable pageable);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
