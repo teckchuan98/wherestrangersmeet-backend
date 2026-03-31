@@ -34,6 +34,7 @@ public class UserService {
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
     public static final String CURRENT_AI_CONSENT_VERSION = "2026-02-19";
     public static final String CURRENT_MOMO_CONSENT_VERSION = "2026-03-18";
+    public static final int MAX_STICKERS_PER_USER = 20;
     private static final char[] PUBLIC_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789".toCharArray();
     private static final int PUBLIC_ID_LENGTH = 6;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -381,6 +382,7 @@ public class UserService {
         user.setOccupationYear(null);
         user.setOccupationDescription(null);
         user.setInterestTags(new ArrayList<>());
+        user.setStickerKeys(new ArrayList<>());
 
         // Delete user photos
         user.getPhotos().clear();
@@ -487,6 +489,53 @@ public class UserService {
     @Transactional(readOnly = true)
     public boolean isUserPairBlocked(Long userId1, Long userId2) {
         return userReportRepository.existsReportBetweenUsers(userId1, userId2);
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getStickerKeys(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
+        return new ArrayList<>(user.getStickerKeys());
+    }
+
+    @Transactional
+    public List<String> saveSticker(Long userId, String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            throw new IllegalArgumentException("Sticker key is required");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
+
+        List<String> stickerKeys = user.getStickerKeys();
+        stickerKeys.removeIf(existing -> objectKey.equals(existing));
+        stickerKeys.add(0, objectKey);
+
+        while (stickerKeys.size() > MAX_STICKERS_PER_USER) {
+            stickerKeys.remove(stickerKeys.size() - 1);
+        }
+
+        return new ArrayList<>(saveUser(user).getStickerKeys());
+    }
+
+    @Transactional
+    public List<String> deleteSticker(Long userId, String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            throw new IllegalArgumentException("Sticker key is required");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user = ensurePublicId(user);
+
+        boolean removed = user.getStickerKeys().removeIf(existing -> objectKey.equals(existing));
+        if (!removed) {
+            throw new RuntimeException("Sticker not found");
+        }
+
+        return new ArrayList<>(saveUser(user).getStickerKeys());
     }
 
     private User saveUser(User user) {

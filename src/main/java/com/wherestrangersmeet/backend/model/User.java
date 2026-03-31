@@ -124,6 +124,12 @@ public class User {
     @Column(name = "interest")
     private List<String> interestTags = new ArrayList<>();
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_stickers", joinColumns = @JoinColumn(name = "user_id"))
+    @OrderColumn(name = "position")
+    @Column(name = "object_key", columnDefinition = "TEXT")
+    private List<String> stickerKeys = new ArrayList<>();
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<UserPhoto> photos = new ArrayList<>();
 

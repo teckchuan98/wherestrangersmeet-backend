@@ -3,6 +3,7 @@ package com.wherestrangersmeet.backend.controller;
 import com.google.firebase.auth.FirebaseToken;
 import com.wherestrangersmeet.backend.model.User;
 import com.wherestrangersmeet.backend.service.FileStorageService;
+import com.wherestrangersmeet.backend.service.MediaFileService;
 import com.wherestrangersmeet.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -15,6 +16,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
@@ -25,6 +28,7 @@ public class UserController {
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
     private final UserService userService;
     private final FileStorageService fileStorageService;
+    private final MediaFileService mediaFileService;
 
     private User getOrCreateCurrentUser(FirebaseToken principal) {
         if (principal == null) {
@@ -46,6 +50,19 @@ public class UserController {
                     name,
                     principal.getPicture());
         });
+    }
+
+    private Map<String, Object> buildStickerResponse(List<String> stickerKeys) {
+        List<Map<String, String>> stickers = new ArrayList<>();
+        for (String key : stickerKeys) {
+            Map<String, String> sticker = new HashMap<>();
+            sticker.put("key", key);
+            sticker.put("url", fileStorageService.generatePresignedUrl(key));
+            stickers.add(sticker);
+        }
+        return Map.of(
+                "stickers", stickers,
+                "limit", UserService.MAX_STICKERS_PER_USER);
     }
 
     /**
@@ -147,9 +164,107 @@ public class UserController {
             user.setVoiceIntroUrl(presigned);
         }
 
+        if (user.getStickerKeys() != null) {
+            List<String> presignedStickers = new ArrayList<>();
+            for (String key : user.getStickerKeys()) {
+                presignedStickers.add(fileStorageService.generatePresignedUrl(key));
+            }
+            user.setStickerKeys(presignedStickers);
+        }
+
         // System.out.println("========================================");
 
         return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/stickers")
+    public ResponseEntity<?> getStickers(@AuthenticationPrincipal FirebaseToken principal) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = getOrCreateCurrentUser(principal);
+        return ResponseEntity.ok(buildStickerResponse(userService.getStickerKeys(user.getId())));
+    }
+
+    @PostMapping("/stickers/upload-url")
+    public ResponseEntity<?> getStickerUploadUrl(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody Map<String, String> request) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        getOrCreateCurrentUser(principal);
+
+        String filename = request.get("filename");
+        String contentHash = request.get("hash");
+
+        try {
+            if (contentHash != null && !contentHash.isBlank()) {
+                var existingMedia = mediaFileService.findByHash(contentHash);
+                if (existingMedia.isPresent()) {
+                    Map<String, String> result = new HashMap<>();
+                    result.put("key", existingMedia.get().getObjectKey());
+                    result.put("exists", "true");
+                    return ResponseEntity.ok(result);
+                }
+            }
+
+            Map<String, String> uploadData = fileStorageService.generatePresignedUploadUrl("user-stickers", filename);
+            uploadData.put("exists", "false");
+            return ResponseEntity.ok(uploadData);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/stickers")
+    public ResponseEntity<?> saveSticker(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestBody Map<String, String> request) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = getOrCreateCurrentUser(principal);
+        String key = request.get("key");
+        String hash = request.get("hash");
+
+        try {
+            if (hash != null && !hash.isBlank()) {
+                mediaFileService.recordIfAbsent(hash, key);
+            }
+            List<String> stickerKeys = userService.saveSticker(user.getId(), key);
+            return ResponseEntity.ok(buildStickerResponse(stickerKeys));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/stickers")
+    public ResponseEntity<?> deleteSticker(
+            @AuthenticationPrincipal FirebaseToken principal,
+            @RequestParam String key) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Authentication failed - no valid Firebase token"));
+        }
+
+        User user = getOrCreateCurrentUser(principal);
+
+        try {
+            List<String> stickerKeys = userService.deleteSticker(user.getId(), key);
+            return ResponseEntity.ok(buildStickerResponse(stickerKeys));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /**

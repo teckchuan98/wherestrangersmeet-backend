@@ -115,7 +115,7 @@ public class FileStorageService {
         }
 
         // Logic to extract KEY from full URL if mistakenly saved
-        // We know our internal keys contain "message-media/" or "user-photos/"
+        // We know our internal keys contain "message-media/", "user-photos/", or "user-stickers/"
         String cleanKey = key;
         if (key.startsWith("http")) {
             if (key.contains("message-media/")) {
@@ -127,6 +127,12 @@ public class FileStorageService {
                 log.info("♻️ Recovered key from URL: {}", cleanKey);
             } else if (key.contains("user-photos/")) {
                 cleanKey = key.substring(key.indexOf("user-photos/"));
+                if (cleanKey.contains("?")) {
+                    cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
+                }
+                log.info("♻️ Recovered key from URL: {}", cleanKey);
+            } else if (key.contains("user-stickers/")) {
+                cleanKey = key.substring(key.indexOf("user-stickers/"));
                 if (cleanKey.contains("?")) {
                     cleanKey = cleanKey.substring(0, cleanKey.indexOf("?"));
                 }
@@ -176,6 +182,8 @@ public class FileStorageService {
                 cleanKey = key.substring(key.indexOf("message-media/"));
             } else if (key.contains("user-photos/")) {
                 cleanKey = key.substring(key.indexOf("user-photos/"));
+            } else if (key.contains("user-stickers/")) {
+                cleanKey = key.substring(key.indexOf("user-stickers/"));
             } else {
                 return;
             }
