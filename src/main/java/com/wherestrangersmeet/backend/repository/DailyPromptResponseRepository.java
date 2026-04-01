@@ -14,10 +14,26 @@ public interface DailyPromptResponseRepository extends JpaRepository<DailyPrompt
 
     @Query("""
             SELECT r FROM DailyPromptResponse r
+            WHERE r.user.id = :userId
+            ORDER BY r.dailyPrompt.activeDate DESC, r.createdAt DESC
+            """)
+    List<DailyPromptResponse> findLatestByUserId(
+            @Param("userId") Long userId,
+            org.springframework.data.domain.Pageable pageable);
+
+    @Query("""
+            SELECT r FROM DailyPromptResponse r
             WHERE r.user.id IN :userIds
               AND r.dailyPrompt.activeDate = :activeDate
             """)
     List<DailyPromptResponse> findByUserIdsAndActiveDate(
             @Param("userIds") List<Long> userIds,
             @Param("activeDate") LocalDate activeDate);
+
+    @Query("""
+            SELECT r FROM DailyPromptResponse r
+            WHERE r.user.id IN :userIds
+            ORDER BY r.user.id ASC, r.dailyPrompt.activeDate DESC, r.createdAt DESC
+            """)
+    List<DailyPromptResponse> findLatestByUserIds(@Param("userIds") List<Long> userIds);
 }

@@ -9,10 +9,12 @@ import com.wherestrangersmeet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -108,27 +110,15 @@ public class DailyPromptService {
             return;
         }
 
-        Optional<DailyPrompt> promptOpt = getTodayPrompt();
-        if (promptOpt.isEmpty()) {
-            user.setTodayPromptId(null);
-            user.setTodayPromptDate(null);
-            user.setTodayPromptText(null);
-            user.setTodayPromptAnswered(false);
-            user.setTodayPromptAnswer(null);
-            user.setTodayPromptAnsweredAt(null);
-            return;
-        }
+        Optional<DailyPrompt> todayPromptOpt = getTodayPrompt();
+        Optional<DailyPromptResponse> todayResponseOpt = todayPromptOpt
+                .flatMap(prompt -> dailyPromptResponseRepository.findByDailyPromptIdAndUserId(prompt.getId(), user.getId()));
+        Optional<DailyPromptResponse> latestResponseOpt = dailyPromptResponseRepository
+                .findLatestByUserId(user.getId(), PageRequest.of(0, 1))
+                .stream()
+                .findFirst();
 
-        DailyPrompt prompt = promptOpt.get();
-        user.setTodayPromptId(prompt.getId());
-        user.setTodayPromptDate(prompt.getActiveDate());
-        user.setTodayPromptText(prompt.getPromptText());
-
-        Optional<DailyPromptResponse> responseOpt = dailyPromptResponseRepository.findByDailyPromptIdAndUserId(prompt.getId(),
-                user.getId());
-        user.setTodayPromptAnswered(responseOpt.isPresent());
-        user.setTodayPromptAnswer(responseOpt.map(DailyPromptResponse::getAnswerText).orElse(null));
-        user.setTodayPromptAnsweredAt(responseOpt.map(DailyPromptResponse::getCreatedAt).orElse(null));
+        applyPromptState(user, todayPromptOpt, todayResponseOpt, latestResponseOpt);
     }
 
     @Transactional(readOnly = true)
@@ -137,37 +127,75 @@ public class DailyPromptService {
             return;
         }
 
-        Optional<DailyPrompt> promptOpt = getTodayPrompt();
-        if (promptOpt.isEmpty()) {
-            for (User user : users) {
-                user.setTodayPromptId(null);
-                user.setTodayPromptDate(null);
-                user.setTodayPromptText(null);
-                user.setTodayPromptAnswered(false);
-                user.setTodayPromptAnswer(null);
-                user.setTodayPromptAnsweredAt(null);
-            }
-            return;
-        }
-
-        DailyPrompt prompt = promptOpt.get();
         List<Long> userIds = users.stream()
                 .map(User::getId)
                 .collect(Collectors.toList());
-        Map<Long, DailyPromptResponse> responsesByUserId = dailyPromptResponseRepository
-                .findByUserIdsAndActiveDate(userIds, prompt.getActiveDate())
-                .stream()
-                .collect(Collectors.toMap(response -> response.getUser().getId(), response -> response));
+        Optional<DailyPrompt> todayPromptOpt = getTodayPrompt();
+        Map<Long, DailyPromptResponse> todayResponsesByUserId = todayPromptOpt
+                .map(prompt -> dailyPromptResponseRepository
+                        .findByUserIdsAndActiveDate(userIds, prompt.getActiveDate())
+                        .stream()
+                        .collect(Collectors.toMap(response -> response.getUser().getId(), response -> response)))
+                .orElseGet(Map::of);
+        Map<Long, DailyPromptResponse> latestResponsesByUserId = new LinkedHashMap<>();
+        for (DailyPromptResponse response : dailyPromptResponseRepository.findLatestByUserIds(userIds)) {
+            latestResponsesByUserId.putIfAbsent(response.getUser().getId(), response);
+        }
 
         for (User user : users) {
+            applyPromptState(
+                    user,
+                    todayPromptOpt,
+                    Optional.ofNullable(todayResponsesByUserId.get(user.getId())),
+                    Optional.ofNullable(latestResponsesByUserId.get(user.getId())));
+        }
+    }
+
+    private void applyPromptState(
+            User user,
+            Optional<DailyPrompt> todayPromptOpt,
+            Optional<DailyPromptResponse> todayResponseOpt,
+            Optional<DailyPromptResponse> latestResponseOpt) {
+        if (todayResponseOpt.isPresent()) {
+            DailyPromptResponse response = todayResponseOpt.get();
+            DailyPrompt prompt = response.getDailyPrompt();
             user.setTodayPromptId(prompt.getId());
             user.setTodayPromptDate(prompt.getActiveDate());
             user.setTodayPromptText(prompt.getPromptText());
-
-            DailyPromptResponse response = responsesByUserId.get(user.getId());
-            user.setTodayPromptAnswered(response != null);
-            user.setTodayPromptAnswer(response != null ? response.getAnswerText() : null);
-            user.setTodayPromptAnsweredAt(response != null ? response.getCreatedAt() : null);
+            user.setTodayPromptAnswered(true);
+            user.setTodayPromptAnswer(response.getAnswerText());
+            user.setTodayPromptAnsweredAt(response.getCreatedAt());
+            return;
         }
+
+        if (latestResponseOpt.isPresent()) {
+            DailyPromptResponse response = latestResponseOpt.get();
+            DailyPrompt prompt = response.getDailyPrompt();
+            user.setTodayPromptId(prompt.getId());
+            user.setTodayPromptDate(prompt.getActiveDate());
+            user.setTodayPromptText(prompt.getPromptText());
+            user.setTodayPromptAnswered(true);
+            user.setTodayPromptAnswer(response.getAnswerText());
+            user.setTodayPromptAnsweredAt(response.getCreatedAt());
+            return;
+        }
+
+        if (todayPromptOpt.isPresent()) {
+            DailyPrompt prompt = todayPromptOpt.get();
+            user.setTodayPromptId(prompt.getId());
+            user.setTodayPromptDate(prompt.getActiveDate());
+            user.setTodayPromptText(prompt.getPromptText());
+            user.setTodayPromptAnswered(false);
+            user.setTodayPromptAnswer(null);
+            user.setTodayPromptAnsweredAt(null);
+            return;
+        }
+
+        user.setTodayPromptId(null);
+        user.setTodayPromptDate(null);
+        user.setTodayPromptText(null);
+        user.setTodayPromptAnswered(false);
+        user.setTodayPromptAnswer(null);
+        user.setTodayPromptAnsweredAt(null);
     }
 }
