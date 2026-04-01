@@ -8,4 +8,6 @@ import java.util.Optional;
 
 public interface DailyPromptRepository extends JpaRepository<DailyPrompt, Long> {
     Optional<DailyPrompt> findByActiveDate(LocalDate activeDate);
+
+    Optional<DailyPrompt> findTopByOrderByActiveDateDesc();
 }
